@@ -1,0 +1,24 @@
+{
+  "version": "1.8.2",
+  "changes": [
+    "30fps bounded exact-trip route estimates, honest GPS age/estimated label",
+    "20-second or 150-metre limit per distinct GPS fix; no restart on duplicate timestamps",
+    "Small corrections eased along path, large/offpath corrections snap to measured GPS",
+    "240ms eased follow, mouse drag/keyboard pan pause follow",
+    "Reduced-motion uses measured GPS, stale data frozen, exact trip identity guards"
+  ],
+  "tests": [
+    "Motion unit scenarios passed",
+    "Headless continuous marker/camera/manual-pan/stale/no-print passed",
+    "Dashboard exact-route clicks, occupancy, announcements, three viewport sizes passed",
+    "90-minute preview and print preparation regression passed",
+    "Receipt layout and service/clock guards passed"
+  ],
+  "staticShapeAudit": {
+    "total": 194,
+    "conservativelyExcludedOver500mSegments": 12
+  },
+  "limits": "Unknown speed/heading, ambiguous/offpath reports, long shape gaps and expired estimates remain stationary. Estimates do not guarantee actual bus movement.",
+  "printing": false,
+  "restarted": false
+}

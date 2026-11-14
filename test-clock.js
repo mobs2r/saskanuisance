@@ -1,0 +1,23 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {InternetClock}=require('./internet-clock');
+(async()=>{
+ let t=100, fail=false, difference=0;
+ const expected=Date.UTC(2027,0,1,5,45,0);
+ const clock=new InternetClock({monotonic:()=>t,fetcher:async provider=>{if(fail)throw new Error('Offline');return {provider,epochMs:expected+(provider==='Google'?difference:0),atMono:t};}});
+ assert.equal(clock.snapshot().status,'unavailable'); assert.equal(clock.snapshot().epochMs,null); assert.throws(()=>clock.now());
+ await clock.sync(); assert.equal(clock.snapshot().status,'synced'); assert.equal(clock.now(),expected);
+ const original=Date.now; Date.now=()=>0;
+ t+=12345; assert.equal(clock.now(),expected+12345); Date.now=original;
+ fail=true; await clock.sync(); assert.equal(clock.snapshot().status,'stale'); assert.equal(clock.snapshot().epochMs,expected+12345); assert.throws(()=>clock.now());
+ fail=false; await clock.sync(); assert.equal(clock.snapshot().status,'synced');
+ t+=90001; assert.equal(clock.snapshot().status,'stale'); assert.throws(()=>clock.now());
+ difference=10000; await clock.sync(); assert.equal(clock.snapshot().status,'stale');
+ clock.invalidate('Woke from sleep'); assert.throws(()=>clock.now());
+ difference=0; await clock.sync(); assert.equal(clock.snapshot().status,'synced');
+ const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Regina',month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true}).format(new Date(expected+90*60000));
+ assert.match(parts,/Jan 1, 2027/); assert.match(parts,/1:15 AM/);
+ const summer=new Intl.DateTimeFormat('en-US',{timeZone:'America/Regina',hour:'numeric',minute:'2-digit',hour12:false}).format(new Date(Date.UTC(2027,6,1,18,0)));
+ assert.equal(summer,'12:00');
+ console.log('PASS: independent internet anchor, monotonic ticking, wall-clock changes ignored, offline unavailable/stale, stale print guard, source disagreement, resume invalidation, Saskatoon rollover and summer timezone.');
+})().catch(error=>{console.error(error);process.exitCode=1;});

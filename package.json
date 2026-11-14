@@ -1,0 +1,15 @@
+{
+  "name": "sample-receipt",
+  "productName": "Saskanuisance",
+  "version": "1.8.2",
+  "description": "Local receipt sample, official Saskatoon transit and ECCC weather.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "test": "node test.js && node test-clock.js && node test-weather.js && node test-transit.js && node test-bus-motion.js && node test-ipc.js && node test-theme.js && node test-service-hours.js && node test-observed-arrivals.js && node test-route-motion.js && node test-route-planner.js && node test-live-feeds.js",
+    "start": "electron ."
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

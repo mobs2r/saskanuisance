@@ -1,0 +1,9 @@
+html.render .receipt-panel>.weather-strip,html.render .receipt-panel>.transit-sidebar,html.render .receipt-panel>.tracked-bus{display:none!important}
+@media print{.receipt-panel>.weather-strip,.receipt-panel>.transit-sidebar,.receipt-panel>.tracked-bus{display:none!important}}
+.app-title{margin:0;padding:7px 12px;font:600 16px 'Segoe UI',sans-serif;letter-spacing:.3px;color:var(--chrome-text);background:var(--chrome-bg)}
+.full-bus-alert{position:absolute;right:-4px;top:-5px;width:16px;height:16px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid white;background:#d71920;color:white;font:bold 13px Arial;z-index:2}
+.bus-pin{position:relative}
+.route-popup strong{display:block}
+.route-popup p{margin:4px 0}
+.route-popup small{display:block;max-width:230px}
+html.render .app-title{display:none!important}

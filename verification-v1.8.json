@@ -1,0 +1,55 @@
+{
+  "version": "1.8.0",
+  "appName": "Saskanuisance",
+  "date": "2026-11-11T19:02:26.571Z",
+  "correction": "Previous estimated motion could move buses up to300m beyond measured GPS and then pause after30s. Active display now uses measured positions only.",
+  "changes": [
+    "Latest observed GPS with age/staleness, out-of-order and implausible-jump guards",
+    "Exact trip-specific clickable route paths; no road snapping",
+    "Confirmed current-stop or first-close next-stop Arriving at announcement",
+    "Selected-bus Voice:on continues despite panning/background; mute/selection/close cancel",
+    "Only fresh explicit FULL status creates red circle/white exclamation",
+    "Official stop wheelchair boarding yes/no/unknown",
+    "Saskanuisance title/header; destination sign preserved"
+  ],
+  "liveVerification": {
+    "time": "2026-11-11T18:59:51Z",
+    "buses": 32,
+    "exactTripShapes": 32,
+    "occupancy": {
+      "manySeats": 1,
+      "noData": 28,
+      "missing": 3,
+      "full": 0
+    },
+    "stopAccessibility": {
+      "yes": 1019,
+      "unknown": 349
+    },
+    "stoppedAtLiveSampleAvailable": false
+  },
+  "checks": {
+    "measuredGpsAndArrivals": "passed",
+    "transitGroups": 26,
+    "ipc": "passed",
+    "headlessActualRouteClick": "passed",
+    "occupancyMarkers": "passed",
+    "backgroundVoiceMock": "passed",
+    "viewports": [
+      "1920x1080",
+      "1280x820",
+      "1000x700"
+    ],
+    "receiptClockWeatherThemeService": "passed",
+    "nativeSpeechDryRunBytes": 125470,
+    "realAudioPlayed": false,
+    "printerCalls": 0,
+    "restarted": false
+  },
+  "limits": [
+    "Positions update when new official GPS arrives, usually about30s; no continuous-motion claim.",
+    "GPS can be inaccurate; off-trip GPS is flagged rather than moved onto a route.",
+    "Stop announcements can be skipped when feed metadata is missing/conflicting/stale or sampling misses the arrival.",
+    "Windows Zira voice is not Orbit call voice."
+  ]
+}

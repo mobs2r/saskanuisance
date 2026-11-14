@@ -1,0 +1,51 @@
+{
+  "version": "1.6.0",
+  "offline": {
+    "receiptRasterNativeDryRun": "passed; no printer opened",
+    "clock": "passed",
+    "weather": "passed",
+    "transitGroups": 25,
+    "motionGroups": 31,
+    "ipc": "passed including map stops and vehicle details",
+    "theme": "passed, astronomical boundaries and trusted time only",
+    "ui": "passed with mocked tiles: automatic follow/center/reselection, clickable canvas stop, next stop, alerts dialog, LED overflow/reduced-motion, both paper widths",
+    "layout": "dark/light 1280x820 and 1000x700; full-width footer; no page scroll"
+  },
+  "liveProvider": {
+    "stops": 1368,
+    "hubs": 6,
+    "linkedPlatforms": 21,
+    "alerts": 32,
+    "nextStopConfirmed": 29,
+    "liveBuses": 32,
+    "source": "read-only official feed check by provider worker"
+  },
+  "nativeElectron": {
+    "passed": true,
+    "report": "C:/Users/mobs2/Downloads/dot-sample-print/electron-test-v1.6-native/self-test.json",
+    "printerOpened": false,
+    "printHelperCalls": 0
+  },
+  "liveVisual": {
+    "passed": true,
+    "appLeftOpen": true,
+    "automaticBusCenterAndFollow": true,
+    "nextStop": "Downtown Terminal West 1 for bus 2608",
+    "clickedStop": "Rusholme / Avenue I, stop 5793",
+    "departuresVisible": true,
+    "officialAlertsVisible": 32,
+    "busMarkersRouteColors": true,
+    "stationHubMarkers": true,
+    "retroNightTheme": true,
+    "weather": "-3 C, Mainly Clear, actual observation 12:00 AM",
+    "mainPageScroll": false,
+    "fullWidthFooter": true
+  },
+  "assistantPrints": 0,
+  "limits": [
+    "Vehicle motion is estimated between GPS fixes and stops on stale data.",
+    "Service ended is not inferred. Unknown service/next-stop evidence stays unknown.",
+    "53 mm physical roll fit remains untested.",
+    "Vehicle type, passenger popularity, Access Transit availability and working payphone status are not invented or displayed as verified."
+  ]
+}

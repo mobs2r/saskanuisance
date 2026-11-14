@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-11T17:32:21.248Z",
+  "layout": "Weather, unchanged receipt preview, print/status, tracking and transit controls consolidated in one internally scrolling left rail. Map full-height beneath destination sign on right.",
+  "viewports": [
+    {
+      "size": "1920x1080",
+      "map": "1596x926"
+    },
+    {
+      "size": "1280x820",
+      "map": "956x666"
+    },
+    {
+      "size": "1000x700",
+      "map": "718x554"
+    }
+  ],
+  "tests": {
+    "noPageOverflow": true,
+    "weatherDialog": true,
+    "searchAndStops": true,
+    "trackingAndVoiceControls": true,
+    "mapBoundsAfterResize": true,
+    "receiptGeometryAnd12MonthRender": true,
+    "receiptNativeDryRun": true,
+    "ipc": true,
+    "printCalls": 0
+  },
+  "installed": true,
+  "restarted": false
+}

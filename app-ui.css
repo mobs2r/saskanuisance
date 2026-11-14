@@ -1,0 +1,83 @@
+
+html:not(.render) { background: #edf1f4; }
+html:not(.render) body {
+  background: radial-gradient(ellipse at 50% 5%, #ffffff 0, #f0f4f6 48%, #e7edf1 100%);
+  padding: 28px 20px;
+  color: #253443;
+  overflow-x: hidden;
+}
+html:not(.render) .preview { position: relative; z-index: 1; animation: receipt-enter 650ms cubic-bezier(.2,.8,.2,1) both; }
+html:not(.render) .ticket { box-shadow: 0 3px 5px #2434420a, 0 18px 38px -15px #24344240; }
+.controls {
+  width: 280px; max-width: 100%; padding: 18px; margin-top: 22px;
+  border: 1px solid #ffffffc9; border-radius: 19px;
+  background: #ffffffc9; box-shadow: 0 8px 26px -18px #223b5059, 0 1px 2px #223b5008;
+  animation: controls-enter 500ms 90ms cubic-bezier(.2,.8,.2,1) both;
+}
+.action-row { display: flex; gap: 10px; }
+#print {
+  display: inline-flex; justify-content: center; align-items: center; gap: 10px;
+  width: 100%; height: 44px; min-height: 44px; border-radius: 11px;
+  border: 1px solid #234c68; padding: 0 18px; color: #fff;
+  background: linear-gradient(165deg, #365f7c, #234762);
+  box-shadow: inset 0 1px 0 #ffffff20, 0 4px 8px #23476218;
+  font: 600 13px/1 "Segoe UI", Arial, sans-serif; letter-spacing: 1.2px;
+  transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+}
+#print svg, .icon-button svg { width: 18px; height: 18px; flex: 0 0 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+#print:hover:not(:disabled) { opacity: 1; transform: translateY(-1px); box-shadow: inset 0 1px 0 #ffffff25, 0 7px 12px #23476225; }
+#print:active:not(:disabled) { transform: translateY(1px) scale(.985); box-shadow: inset 0 1px 3px #10263840; }
+#print:focus-visible, .icon-button:focus-visible { outline: 3px solid #5282a8; outline-offset: 3px; }
+#print:disabled { cursor: not-allowed; opacity: .45; }
+#print[data-printing="true"] svg { animation: print-breathe 1s ease-in-out infinite; }
+.device-status { grid-template-columns: 24px 1fr; gap: 10px; margin-top: 17px; font-size: 12px; line-height: 22px; color: #425363; }
+.status-dot, #time-status { align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 7px; background: #eef1f4; color: #8b97a3; transition: color 180ms ease, background 180ms ease; }
+.status-dot svg, #time-status svg, .clock-icon { width: 16px; height: 16px; stroke-width: 1.65; }
+.status-dot[data-connection="connected"], #time-status[data-state="synced"] { color: #247457; background: #e8f3ed; }
+.status-dot[data-connection="disconnected"] { color: #af4c4c; background: #f9eceb; }
+#time-status[data-state="stale"] { color: #9c6d21; background: #faf1df; }
+.status-changed { animation: status-settle 450ms ease; }
+.clock-line { grid-template-columns: 24px 16px 1fr; gap: 10px; margin-top: 10px; font-size: 12px; line-height: 22px; color: #425363; }
+.clock-icon { color: #7e8d9c; }
+#current-time { letter-spacing: .15px; }
+#current-date { margin: 1px 0 0 60px; font-size: 12px; line-height: 20px; color: #7b8996; }
+@keyframes receipt-enter { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes controls-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes status-settle { 0%,100% { transform: scale(1); } 45% { transform: scale(1.1); } }
+@keyframes print-breathe { 50% { opacity: .45; transform: translateY(1px); } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+@media print {
+  html:not(.render) body { background: #fff; padding: 0; }
+  html:not(.render) .preview { animation: none; transform: none; }
+  html:not(.render) .ticket { box-shadow: none; }
+}
+.icon-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; border: 1px solid #dfe7ed; border-radius: 11px; color: #62798a; background: #edf2f6; cursor: pointer; transition: background 150ms ease, transform 150ms ease; }
+.icon-button:hover { opacity: 1; background: #e3ebf1; }
+.icon-button:active { transform: scale(.96); }
+#paper-settings[data-active="narrow50"] { color: #245a7c; background: #dfeef8; border-color: #b8d6e9; }
+#paper-dialog { width: min(330px, calc(100vw - 28px)); border: 1px solid #ffffffbd; border-radius: 20px; padding: 22px; color: #2b4152; background: #f9fbfc; box-shadow: 0 24px 80px #152c4252; font-family: "Segoe UI",Arial,sans-serif; }
+#paper-dialog[open] { animation: dialog-enter 180ms ease-out; }
+#paper-dialog::backdrop { background: #20374955; backdrop-filter: blur(4px); }
+.dialog-heading { display: flex; justify-content: space-between; align-items: center; margin: 0 0 18px; }
+.dialog-heading h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.3px; }
+#paper-close { width: 30px; min-width: 30px; height: 30px; min-height: 30px; border: none; background: none; }
+.paper-option { display: flex; gap: 12px; align-items: center; margin: 9px 0; padding: 14px 12px; border: 1px solid #e0e8ee; border-radius: 12px; background: #fff; cursor: pointer; }
+.paper-option:has(input:checked) { border-color: #8eb4cf; background: #eef5fa; }
+.paper-option input { width: 16px; height: 16px; min-height: 0; margin: 0; accent-color: #315d7c; }
+.paper-option strong, .paper-option small { display: block; font-size: 13px; font-weight: 600; line-height: 20px; }
+.paper-option small { font-size: 11px; font-weight: 400; color: #728595; }
+#paper-note, #paper-error { margin: 14px 2px 0; font-size: 12px; line-height: 18px; color: #718392; }
+#paper-error { color: #a84949; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 21px; }
+.dialog-actions button { min-height: 36px; padding: 0 16px; border-radius: 9px; border: 1px solid #d9e3ea; background: #fff; color: #526b7d; font: 600 12px "Segoe UI",Arial,sans-serif; }
+.dialog-actions #paper-apply { color: #fff; background: #315b78; border-color: #315b78; }
+@keyframes dialog-enter { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media print { #paper-dialog { display: none !important; } }
+.render { overflow: hidden; }
+.render body { width: var(--paper-width,58mm); overflow: hidden; }
+
+.service-countdown {font: 11px/1.4 "Segoe UI",sans-serif; text-align:center; margin:6px 0; color:var(--muted,#718392); font-variant-numeric:tabular-nums;}
+#print:disabled {filter:grayscale(1); opacity:.4;cursor:not-allowed;}
+@media print {.service-countdown{display:none!important;}}

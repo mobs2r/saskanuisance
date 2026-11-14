@@ -1,0 +1,25 @@
+{
+  "date": "2026-11-11T12:59:39.617Z",
+  "changes": [
+    "No buses reported!",
+    "Removed top status pills and route dropdown",
+    "Shared sidebar bus, route, stop and destination search",
+    "Top destination scroller with 1337 / Illicit Interactive Corporation default",
+    "Plain footer Notices access retained",
+    "Buffered stop-extent panning boundary and resize-aware zoom-out limit"
+  ],
+  "verification": {
+    "headlessDashboard": "passed",
+    "search": "passed",
+    "selectedBusAndStop": "passed",
+    "emptyOfflineStale": "passed",
+    "dayNightServiceControls": "passed",
+    "compactAndWideLayout": "passed",
+    "resizeMapBounds": "passed",
+    "everyStopFitsAtZoomFloor": "passed",
+    "receiptNativeDryRun": "passed; no printer opened",
+    "clockWeatherTransitMotionIpcThemeService": "passed",
+    "printCalls": 0
+  },
+  "restarted": false
+}

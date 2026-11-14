@@ -1,0 +1,28 @@
+{
+  "date": "2026-11-11T13:34:23.724Z",
+  "feature": "Spoken approaching-stop announcements for followed bus",
+  "voice": "Microsoft Zira Desktop (local Windows voice, not Orbit call voice)",
+  "trigger": "Confirmed next stop and actual position at most 45 seconds old; official incoming status, or two newer GPS fixes moving at least 5 m closer within 150 m",
+  "guards": [
+    "follow only",
+    "mute persisted locally",
+    "pause, selection change, hidden window and app quit cancel",
+    "stale/unknown/no-service suppression",
+    "deduplication per vehicle/trip/stop sequence, expires after six hours"
+  ],
+  "tests": {
+    "unit": "passed",
+    "ipc": "passed",
+    "dashboardAndMute": "passed",
+    "serviceControls": "passed",
+    "nativeSynthesisToMemoryBytes": 124592,
+    "audiblePlaybackTested": false,
+    "printCalls": 0,
+    "restarted": false
+  },
+  "limits": [
+    "Feed refresh is not continuous; announcement timing can lag real movement.",
+    "Physical speaker output not tested.",
+    "Windows voice is a fallback; exact Orbit voice is unavailable."
+  ]
+}
