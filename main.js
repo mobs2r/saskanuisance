@@ -9,6 +9,7 @@ const {InternetClock} = require('./internet-clock');
 const {WindowsAnnouncements}=require('./stop-announcements');
 const announcements=new WindowsAnnouncements();
 const {PROFILES,profileFor,savedProfile} = require('./paper-profiles');
+const {parsePrintedAt} = require('./print-time');
 let selectedPaper = 'roll57';
 const settingsFile = () => path.join(app.getPath('userData'),'paper-settings.json');
 async function loadPaper() { try { selectedPaper=savedProfile(JSON.parse(await fs.readFile(settingsFile(),'utf8'))); } catch { selectedPaper='roll57'; } }
@@ -137,16 +138,9 @@ async function renderReceipt(now = internetClock.now(), paperId = selectedPaper)
       window.sampleReceipt.refreshExpiry(${Number(now)});
       const ticket = document.querySelector('.ticket');
       if (!ticket) throw new Error('Receipt layout is missing the ticket.');
-      let sample = document.querySelector('.sample');
-      if (!sample) {
-        sample = document.createElement('p');
-        sample.className = 'sample';
-        sample.textContent = 'SAMPLE — NOT VALID';
-        ticket.appendChild(sample);
-      }
+      const foot = document.querySelector('.terms').getBoundingClientRect();
       const rect = ticket.getBoundingClientRect();
-      const mark = sample.getBoundingClientRect();
-      return {paper: ${JSON.stringify(paper.id)}, overflow: getComputedStyle(document.documentElement).overflow, bodyWidth: document.body.getBoundingClientRect().width, height: rect.height, width: rect.width, sample: sample.textContent, markLeft: mark.left, markRight: mark.right, markBottom: mark.bottom, ticketBottom: rect.bottom,
+      return {paper: ${JSON.stringify(paper.id)}, overflow: getComputedStyle(document.documentElement).overflow, bodyWidth: document.body.getBoundingClientRect().width, height: rect.height, width: rect.width, footerTop: foot.top, footerBottom: foot.bottom, ticketBottom: rect.bottom,
         time: document.querySelector('#expiry-time').dateTime, timeText: document.querySelector('#expiry-time svg').getAttribute('aria-label'), dateText: document.querySelector('#expiry-date svg').getAttribute('aria-label'),
         footer: document.querySelector('.terms').textContent, logoTransform: getComputedStyle(document.querySelector('.logo')).transform,
         trim: getComputedStyle(ticket, '::after').borderLeftStyle, trimDisplay: getComputedStyle(ticket,'::after').display,
@@ -156,7 +150,8 @@ async function renderReceipt(now = internetClock.now(), paperId = selectedPaper)
         trimX: rect.right,
         footerLines: Array.from(document.querySelectorAll('.terms-line')).map(node => { const range = document.createRange(); range.selectNodeContents(node); const r = range.getBoundingClientRect(); return {text: node.textContent, left: r.left, right: r.right, top: r.top, bottom: r.bottom}; })};
     })()`);
-    if (!/SAMPLE\s*[-—]\s*NOT VALID/.test(details.sample) || details.markBottom > details.ticketBottom + 1 || details.trimDisplay !== 'none' || details.markLeft < 0 || details.markRight >= details.trimX) throw new Error('Sample marker or trim guide failed validation. Printing stopped.');
+    if (details.trimDisplay !== 'none') throw new Error('Trim guide failed validation. Printing stopped.');
+    if (details.footerTop < 0 || details.footerBottom > details.ticketBottom + 1) throw new Error('Footer does not fit the ticket. Printing stopped.');
     if (!details.footer.includes('permits transfers prior') || details.footerLines.length !== 3 || details.footerLines.some(line => line.left < 0 || line.right >= details.trimX)) throw new Error('Footer failed validation. Printing stopped.');
     if(details.contentBounds.some(item=>item.left < -.05 || item.right > details.trimX + .05)) throw new Error('Original-size content does not fit this paper layout. Printing stopped instead of shrinking or clipping.');
     const height = Math.ceil(details.height * ZOOM);
@@ -170,12 +165,16 @@ async function renderReceipt(now = internetClock.now(), paperId = selectedPaper)
   } finally { renderer.destroy(); }
 }
 const PRINT_CONFIRM = Object.freeze({type: 'none', title: '', message: 'Are you ready to print?', buttons: ['Yes', 'No'], defaultId: 1, cancelId: 1, noLink: true});
-async function handlePrint(event, ask = () => dialog.showMessageBox(window, PRINT_CONFIRM)) {
+async function handlePrint(event, ask = () => dialog.showMessageBox(window, PRINT_CONFIRM), options = {}) {
   if (!isTrusted(event)) throw new Error('Untrusted request.');
   if (busy) return {ok: false, message: 'A print request is already open.'};
   busy = true;
   try {
     internetClock.now();
+    const rawTime = options?.printedAt;
+    const supplied = rawTime !== undefined && rawTime !== null && String(rawTime).trim() !== '';
+    const printedAt = supplied ? parsePrintedAt(rawTime) : null;
+    if (supplied && !printedAt) return {ok: false, message: 'That print time is not valid. Use HH:MM in 24-hour form, or leave it blank.'};
     const gate=transitData().serviceHours();
     if(!gate.allowed)return {ok:false,message:gate.status==='off-hours'?'Printing is disabled outside scheduled bus service. See the countdown in the app.':'Printing is disabled: '+gate.reason+'.'};
     const status = await printerStatus();
@@ -183,7 +182,7 @@ async function handlePrint(event, ask = () => dialog.showMessageBox(window, PRIN
     if (status.connection === 'disconnected') return {ok: false, message: 'The M860 USB device is disconnected. Check its cable and power, then try again.'};
     const answer = await ask();
     if (answer.response !== 0) return {ok: true, cancelled: true, message: 'Cancelled. Nothing was printed.'};
-    const {raster} = await renderReceipt();
+    const {raster} = await renderReceipt(printedAt ?? internetClock.now());
     internetClock.now();
     if(!transitData().serviceHours().allowed)return {ok:false,message:'Scheduled service availability changed. Nothing was printed.'};
     const result = await sendRaster(raster);
@@ -238,8 +237,8 @@ async function start() {
   ipcMain.handle('sample:service-hours', event=>{if(!isTrusted(event))throw Error('Untrusted request.');return transitData().serviceHours();});
   ipcMain.handle('sample:time', event => { if (!isTrusted(event)) throw new Error('Untrusted request.'); return internetClock.snapshot(); });
   ipcMain.handle('sample:status', event => { if (!isTrusted(event)) throw new Error('Untrusted request.'); return printerStatus(); });
-  ipcMain.handle('sample:print', async event => {
-    const result = await handlePrint(event);
+  ipcMain.handle('sample:print', async (event, options) => {
+    const result = await handlePrint(event, undefined, options);
     if (!result.ok) await dialog.showMessageBox(window, {type: 'error', title: 'Printer', message: result.message, buttons: ['OK']});
     return result;
   });
@@ -273,6 +272,10 @@ async function selfTest() {
   const yearEnd = Date.UTC(2027, 0, 1, 5, 45, 0);
   const rollover = await renderReceipt(yearEnd);
   assert.equal(rollover.details.dateText, 'Jan 1,2027');
+  const fixedTime = Date.parse('2026-03-08T23:15:00Z');
+  const fixed = await renderReceipt(fixedTime);
+  assert.equal(fixed.details.timeText, '6:45 PM', 'Custom print time must reach the receipt, plus 90 minutes.');
+  assert.equal(fixed.details.dateText, 'Mar 8,2026');
   const event = {sender: window.webContents, senderFrame: window.webContents.mainFrame};
   const originalPrinterStatus = await printerStatus();
   let release;
@@ -335,7 +338,6 @@ async function selfTest() {
   await delay(200);
   const screenshot = await captureHidden(window,undefined);
   await fs.writeFile(path.join(selfTestDir, 'app-preview.png'), screenshot.toPNG());
-  await fs.writeFile(path.join(selfTestDir, 'self-test.json'), JSON.stringify({ok: true, electron: process.versions.electron, receipt: receipt.details, dimensions: receipt.image.getSize(), chunks: receipt.raster.chunks.map(chunk => chunk.length), dryRun, yearRollover: rollover.details.dateText, cancel, repeated, staleUi, syncedUi, internetTime: internetClock.snapshot(), centered, printConfirmation: PRINT_CONFIRM, security, printHelperCalls, paperProfiles: PROFILES, narrow: narrow.details, narrowDimensions: narrow.image.getSize(), narrowDryRun, paperDialog, reducedMotion, brandUi, printer: originalPrinterStatus}, null, 2));
+  await fs.writeFile(path.join(selfTestDir, 'self-test.json'), JSON.stringify({ok: true, electron: process.versions.electron, receipt: receipt.details, dimensions: receipt.image.getSize(), chunks: receipt.raster.chunks.map(chunk => chunk.length), dryRun, yearRollover: rollover.details.dateText, customTime: fixed.details, cancel, repeated, staleUi, syncedUi, internetTime: internetClock.snapshot(), centered, printConfirmation: PRINT_CONFIRM, security, printHelperCalls, paperProfiles: PROFILES, narrow: narrow.details, narrowDimensions: narrow.image.getSize(), narrowDryRun, paperDialog, reducedMotion, brandUi, printer: originalPrinterStatus}, null, 2));
   app.quit();
 }
-
