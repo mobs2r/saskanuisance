@@ -37,7 +37,6 @@ html[data-paper="roll57"] .ticket { width: 56mm; padding-left: 0; padding-right:
 html[data-paper="roll57"] .ticket::after { display: none; }
 html[data-paper="roll57"] .logo { width: 48mm; max-width: none; margin-left: auto; margin-right: auto; transform: none; }
 html[data-paper="roll57"] .receipt-copy { width: 50mm; position: relative; left: 50%; transform: translateX(-50%); overflow: visible; }
-html[data-paper="roll57"] .sample { width: 46mm; margin-left: auto; margin-right: auto; }
 .render .app-backdrop, .render .brand-footer, .render #credits-dialog, .render #contact-dialog { display: none !important; }
 @media print { .app-backdrop, .brand-footer, #credits-dialog { display: none !important; } }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation: none !important; transition: none !important; } }
