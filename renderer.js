@@ -89,6 +89,7 @@
     let checking=false, checkingTime=false, printing=false, clock=null, paperReady=false;
     const printLabel = document.getElementById('print-label');
     const paperError=document.getElementById('paper-error');
+    const printTime=document.getElementById('print-time');
     let paperState=null, savingPaper=false, service=null, servicePending=false;
     const serviceNote=document.getElementById('service-countdown');
     async function checkService(){if(servicePending)return;servicePending=true;try{service={...await window.sampleApp.serviceHours(),atMono:performance.now()};}catch{service=null;}finally{servicePending=false;paintClock();}}
@@ -125,6 +126,7 @@
       serviceNote.hidden=allowed;
       serviceNote.title=''+(remaining!==null?'Next start: '+liveDate.format(service.nextStart)+', '+liveTime.format(service.nextStart)+' Saskatoon.':'');
       printButton.disabled=printing || !fresh || !paperReady || !allowed;
+      printTime.disabled=printing;
       printButton.title=!fresh?description:allowed?'Print the sample receipt':serviceNote.textContent+' (scheduled service, not live operations)';
       const solar=Number.isFinite(instant)?window.SolarTheme?.themeAt(instant):null;
       const phase=solar?.theme==='light'?'sun':solar?.theme==='dark'?'moon':'unknown';
@@ -155,8 +157,9 @@
     setInterval(checkStatus,5000); setInterval(checkTime,1000); setInterval(paintClock,250);
     printButton.addEventListener('click',async()=>{
       if(printButton.disabled)return;
+      const printedAt=printTime.value.trim();
       printing=true; printLabel.textContent='PRINTING...'; printButton.dataset.printing='true'; paintClock();
-      try { await window.sampleApp.print(); }
+      try { await window.sampleApp.print(printedAt ? {printedAt} : undefined); }
       finally { printing=false; printLabel.textContent='PRINT'; printButton.dataset.printing='false'; await checkTime(); await checkStatus(); }
     });
   }
