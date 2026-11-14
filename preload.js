@@ -20,7 +20,7 @@ contextBridge.exposeInMainWorld('sampleApp', Object.freeze({
   scooters: () => ipcRenderer.invoke('sample:scooters'),
   cityPowerUpdates: () => ipcRenderer.invoke('sample:city-power-updates'),
   serviceHours: () => ipcRenderer.invoke('sample:service-hours'),
-  print: () => ipcRenderer.invoke('sample:print'),
+  print: options => ipcRenderer.invoke('sample:print', options),
   status: () => ipcRenderer.invoke('sample:status'),
   time: () => ipcRenderer.invoke('sample:time'),
   paper: () => ipcRenderer.invoke('sample:paper:get'),
@@ -28,4 +28,3 @@ contextBridge.exposeInMainWorld('sampleApp', Object.freeze({
   plan: request => ipcRenderer.invoke('sample:plan', request),
   setPaper: id => ipcRenderer.invoke('sample:paper:set', id)
 }));
-
