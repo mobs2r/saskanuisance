@@ -18,13 +18,25 @@ assert.throws(() => rasterize(Buffer.alloc(4), 472, 10));
 assert.throws(() => rasterize(Buffer.alloc(4), 471, 1));
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 assert.match(html, /permits transfers prior/);
-assert.match(html, /SAMPLE\s*[-—]\s*NOT VALID/);
+assert.match(html, /id="print-time"/);
 assert.match(html, /translateX\(calc\(-3 \* var\(--unit\)\)\)/);
 assert.match(html, /right: 2mm/);
 assert.match(html, /connect-src 'none'/);
 assert.equal((html.match(/<script>/g) || []).length, 0);
 assert.match(fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8'), /nodeIntegration: false/);
-console.log('PASS: raster bit order, blank/black/transparent pixels, 64-row chunks, dimensions, sample marker, plural footer, logo shift, trim, and offline CSP.');
+const {parsePrintedAt} = require('./print-time');
+const base = new Date('2026-11-11T04:30:00Z');
+assert.equal(parsePrintedAt('', base), null);
+assert.equal(parsePrintedAt('   ', base), null);
+assert.equal(parsePrintedAt('23:42', base).getHours(), 23);
+assert.equal(parsePrintedAt('11:42 PM', base).getHours(), 23);
+assert.equal(parsePrintedAt('12:05 AM', base).getHours(), 0);
+assert.equal(parsePrintedAt('12:05 PM', base).getHours(), 12);
+assert.equal(parsePrintedAt('24:00', base), null);
+assert.equal(parsePrintedAt('11:75', base), null);
+assert.equal(parsePrintedAt('nonsense', base), null);
+assert.equal(parsePrintedAt('2026-03-08T18:45:00Z', base).toISOString(), '2026-03-08T18:45:00.000Z');
+console.log('PASS: raster bit order, blank/black/transparent pixels, 64-row chunks, dimensions, print-time field and parser, plural footer, logo shift, trim, and offline CSP.');
 
 const {spawnSync} = require('node:child_process');
 function wire(chunks) { const header = Buffer.alloc(8); header.writeUInt32LE(0x31504d53); header.writeUInt32LE(chunks.length, 4); return Buffer.concat([header, ...chunks.flatMap(chunk => { const size = Buffer.alloc(4); size.writeUInt32LE(chunk.length); return [size, chunk]; })]); }
