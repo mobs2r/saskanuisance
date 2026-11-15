@@ -10,6 +10,8 @@ const {WindowsAnnouncements}=require('./stop-announcements');
 const announcements=new WindowsAnnouncements();
 const {PROFILES,profileFor,savedProfile} = require('./paper-profiles');
 const {parsePrintedAt} = require('./print-time');
+const {compose} = require('./text-print');
+const tokens = require('./tokens');
 let selectedPaper = 'roll57';
 const settingsFile = () => path.join(app.getPath('userData'),'paper-settings.json');
 async function loadPaper() { try { selectedPaper=savedProfile(JSON.parse(await fs.readFile(settingsFile(),'utf8'))); } catch { selectedPaper='roll57'; } }
@@ -20,6 +22,7 @@ async function savePaper(id) {
   selectedPaper=id; return {selected:selectedPaper,profiles:PROFILES};
 }
 const internetClock = new InternetClock();
+const receiptFormat = new Intl.DateTimeFormat('en-US', {timeZone:'America/Regina',year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
 let transitProvider=null, weatherProvider=null, cityInfoProvider=null, cityMapProvider=null, saskPowerProvider=null, cityPowerProvider=null;
 const trustedNow=()=>{try{return internetClock.now();}catch{return null;}};
 function transitData(){if(!transitProvider){const {TransitProvider}=require('./transit-provider');transitProvider=new TransitProvider({cacheDir:path.join(app.getPath('userData'),'transit-cache'),now:trustedNow});transitProvider.start().catch(()=>{});}return transitProvider;}
@@ -146,7 +149,7 @@ async function renderReceipt(now = internetClock.now(), paperId = selectedPaper)
         trim: getComputedStyle(ticket, '::after').borderLeftStyle, trimDisplay: getComputedStyle(ticket,'::after').display,
         logoWidth: document.querySelector('.logo').getBoundingClientRect().width,
         fontSizes: ['.heading','.valid-label','.terms'].map(selector=>getComputedStyle(document.querySelector(selector)).fontSize),
-        contentBounds: ['.heading','.valid-label','#expiry-time svg','#expiry-date svg','.logo'].map(selector=>{const el=document.querySelector(selector);let r;if(el.tagName==='H2'||el.tagName==='P'){const range=document.createRange();range.selectNodeContents(el);r=range.getBoundingClientRect();}else{r=el.getBoundingClientRect();}return {selector,left:r.left,right:r.right};}),
+        contentBounds: ['.heading','.valid-label','#expiry-time svg','#expiry-date svg','.logo'].map(selector=>{const el=document.querySelector(selector);let r;if(el.tagName==='H2'||el.tagName==='P'){const range=document.createRange();range.selectNodeContents(el);r=range.getBoundingClientRect();}else{r=el.getBoundingClientRect();}return {selector,left:r.left,right:r.right,top:r.top};}),
         trimX: rect.right,
         footerLines: Array.from(document.querySelectorAll('.terms-line')).map(node => { const range = document.createRange(); range.selectNodeContents(node); const r = range.getBoundingClientRect(); return {text: node.textContent, left: r.left, right: r.right, top: r.top, bottom: r.bottom}; })};
     })()`);
@@ -161,7 +164,13 @@ async function renderReceipt(now = internetClock.now(), paperId = selectedPaper)
     const captured = await captureHidden(renderer,{x: 0, y: 0, width: paper.rasterWidth, height});
     const image = captured.resize({width: paper.rasterWidth, height, quality: 'best'});
     const raster = rasterize(image.toBitmap(), paper.rasterWidth, height, paper.horizontalOffsetDots ?? 0);
-    return {image, raster, details};
+    const logoBox = details.contentBounds.find(item => item.selector === '.logo');
+    const logoCss = Math.max(1, details.logoWidth * (201 / 800));
+    const logoCapture = await captureHidden(renderer, {x: 0, y: Math.max(0, Math.floor(logoBox.top)), width: Math.round(paper.rasterWidth / ZOOM), height: Math.ceil(logoCss)});
+    const logoHeight = Math.max(1, Math.ceil(logoCss * ZOOM));
+    const logoImage = logoCapture.resize({width: paper.rasterWidth, height: logoHeight, quality: 'best'});
+    const logoRaster = rasterize(logoImage.toBitmap(), paper.rasterWidth, logoHeight, paper.horizontalOffsetDots ?? 0);
+    return {image, raster, logoRaster, details};
   } finally { renderer.destroy(); }
 }
 const PRINT_CONFIRM = Object.freeze({type: 'none', title: '', message: 'Are you ready to print?', buttons: ['Yes', 'No'], defaultId: 1, cancelId: 1, noLink: true});
@@ -182,11 +191,23 @@ async function handlePrint(event, ask = () => dialog.showMessageBox(window, PRIN
     if (status.connection === 'disconnected') return {ok: false, message: 'The M860 USB device is disconnected. Check its cable and power, then try again.'};
     const answer = await ask();
     if (answer.response !== 0) return {ok: true, cancelled: true, message: 'Cancelled. Nothing was printed.'};
-    const {raster} = await renderReceipt(printedAt ?? internetClock.now());
+    const stamp = printedAt ?? internetClock.now();
+    const token = await tokens.current();
+    const issuedAt = token ? token.issuedAt : stamp;
+    const preview = await renderReceipt(issuedAt);
+    const expiry = new Date(issuedAt + 90 * 60 * 1000);
+    const parts = Object.fromEntries(receiptFormat.formatToParts(expiry).map(part => [part.type, part.value]));
+    const raster = compose({
+      time: parts.hour + ':' + parts.minute + ' ' + parts.dayPeriod,
+      date: (parts.month + ' ' + parts.day + ', ' + parts.year).toUpperCase(),
+      terms: preview.details.footerLines.map(line => line.text),
+      barcode: token ? token.payload : null,
+      logo: preview.logoRaster
+    });
     internetClock.now();
     if(!transitData().serviceHours().allowed)return {ok:false,message:'Scheduled service availability changed. Nothing was printed.'};
     const result = await sendRaster(raster);
-    return {ok: true, message: `Sample sent to M860 (job ${result.jobId}). Check the paper before printing again.`};
+    return {ok: true, message: 'Sample sent to M860 (job ' + result.jobId + '). Check the paper before printing again.'};
   } catch (error) { return {ok: false, message: error.message}; }
   finally { busy = false; }
 }
@@ -194,6 +215,7 @@ let liveFeedSet=null;
 function liveFeeds(){if(!liveFeedSet){const {ViaLive,Scooters}=require('./live-feeds');liveFeedSet={via:new ViaLive({ttl:60000}),scooters:new Scooters({ttl:60000})};}return liveFeedSet;}
 async function start() {
   await loadPaper();
+  tokens.init(app.getPath('userData'));
   internetClock.sync();
   const syncTimer=setInterval(()=>internetClock.sync(),60000); syncTimer.unref();
   powerMonitor.on('suspend',()=>internetClock.invalidate('Computer was suspended; internet time needs resync.'));
@@ -234,6 +256,10 @@ async function start() {
   ipcMain.handle('sample:city-power-updates',async event=>{if(!isTrusted(event))throw new Error('Untrusted request.');return cityPowerData().refresh();});
   ipcMain.handle('sample:paper:get', event => { if(!isTrusted(event)) throw new Error('Untrusted request.'); return {selected:selectedPaper,profiles:PROFILES}; });
   ipcMain.handle('sample:paper:set', (event,id) => { if(!isTrusted(event)) throw new Error('Untrusted request.'); return savePaper(id); });
+  ipcMain.handle('sample:tokens:get', async event => { if(!isTrusted(event)) throw new Error('Untrusted request.'); return tokens.load(); });
+  ipcMain.handle('sample:tokens:add', async (event, input) => { if(!isTrusted(event)) throw new Error('Untrusted request.'); return tokens.add(input ?? {}); });
+  ipcMain.handle('sample:tokens:remove', async (event, id) => { if(!isTrusted(event)) throw new Error('Untrusted request.'); return tokens.remove(id); });
+  ipcMain.handle('sample:tokens:select', async (event, id) => { if(!isTrusted(event)) throw new Error('Untrusted request.'); return tokens.select(id); });
   ipcMain.handle('sample:service-hours', event=>{if(!isTrusted(event))throw Error('Untrusted request.');return transitData().serviceHours();});
   ipcMain.handle('sample:time', event => { if (!isTrusted(event)) throw new Error('Untrusted request.'); return internetClock.snapshot(); });
   ipcMain.handle('sample:status', event => { if (!isTrusted(event)) throw new Error('Untrusted request.'); return printerStatus(); });
