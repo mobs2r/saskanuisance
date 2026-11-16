@@ -41,15 +41,19 @@ console.log('PASS: raster bit order, blank/black/transparent pixels, 64-row chun
 const {spawnSync} = require('node:child_process');
 function wire(chunks) { const header = Buffer.alloc(8); header.writeUInt32LE(0x31504d53); header.writeUInt32LE(chunks.length, 4); return Buffer.concat([header, ...chunks.flatMap(chunk => { const size = Buffer.alloc(4); size.writeUInt32LE(chunk.length); return [size, chunk]; })]); }
 const helper = path.join(__dirname, 'ReceiptPrint.exe');
-const dryRun = spawnSync(helper, ['--dry-run'], {input: wire(blank.chunks), windowsHide: true, encoding: 'utf8'});
+const helperHost = process.platform === 'win32';
+function runHelper(args, input) { return spawnSync(helper, args, {input, windowsHide: true, encoding: 'utf8'}); }
+if (helperHost) {
+const dryRun = runHelper(['--dry-run'], wire(blank.chunks));
 assert.equal(dryRun.status, 0);
 assert.equal(JSON.parse(dryRun.stdout).printerOpened, false);
 assert.equal(JSON.parse(dryRun.stdout).bytes, blank.bytes);
-const invalid = spawnSync(helper, ['--dry-run'], {input: Buffer.from('NOT A RECEIPT'), windowsHide: true, encoding: 'utf8'});
+const invalid = runHelper(['--dry-run'], Buffer.from('NOT A RECEIPT'));
 assert.equal(invalid.status, 1);
 assert.equal(JSON.parse(invalid.stdout).ok, false);
 assert.equal(JSON.parse(invalid.stdout).outcomeUncertain, false);
 console.log('PASS: compiled native helper dry run and malformed-payload refusal. No printer opened.');
+} else console.log('SKIP: ReceiptPrint.exe is a .NET Framework helper and runs on Windows. Raster checks above still ran.');
 
 const {PROFILES,profileFor,savedProfile}=require('./paper-profiles');
 assert.equal(savedProfile(null),'roll57');
@@ -59,15 +63,19 @@ assert.throws(()=>profileFor('anything'));
 assert.equal(profileFor('roll57').rasterWidth,448);
 const narrow=rasterize(Buffer.alloc(416*130*4,255),416,130);
 assert.equal(narrow.chunks[1][4],52);
-const narrowCheck=spawnSync(helper,['--dry-run'],{input:wire(narrow.chunks),windowsHide:true,encoding:'utf8'});
+if (helperHost) {
+const narrowCheck=runHelper(['--dry-run'],wire(narrow.chunks));
 assert.equal(narrowCheck.status,0);
 assert.equal(JSON.parse(narrowCheck.stdout).printerOpened,false);
-const mixed=spawnSync(helper,['--dry-run'],{input:wire([blank.chunks[0],blank.chunks[1],narrow.chunks[1],blank.chunks.at(-1)]),windowsHide:true,encoding:'utf8'});
+const mixed=runHelper(['--dry-run'],wire([blank.chunks[0],blank.chunks[1],narrow.chunks[1],blank.chunks.at(-1)]));
 assert.equal(mixed.status,1);
 assert.equal(JSON.parse(mixed.stdout).outcomeUncertain,false);
+}
 const style=fs.readFileSync(path.join(__dirname,'app-ui.css'),'utf8');
 assert.match(style,/prefers-reduced-motion: reduce/);
 assert.match(style,/animation: none !important/);
 console.log('PASS: supported paper profiles, 416-dot narrow dry run, mixed-width rejection, and reduced-motion stylesheet. No printer opened.');
 
-const single=rasterize(Buffer.alloc(448*130*4,255),448,130);const singleCheck=spawnSync(helper,['--dry-run'],{input:wire(single.chunks),windowsHide:true,encoding:'utf8'});assert.equal(singleCheck.status,0);assert.equal(JSON.parse(singleCheck.stdout).printerOpened,false);console.log('PASS 448-dot single 57 mm native dry run.');
+const single=rasterize(Buffer.alloc(448*130*4,255),448,130);
+if (helperHost) { const singleCheck=runHelper(['--dry-run'],wire(single.chunks));assert.equal(singleCheck.status,0);assert.equal(JSON.parse(singleCheck.stdout).printerOpened,false);console.log('PASS 448-dot single 57 mm native dry run.'); }
+else console.log('SKIP: 448-dot native dry run runs on Windows.');

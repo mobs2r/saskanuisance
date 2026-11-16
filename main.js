@@ -12,6 +12,8 @@ const {PROFILES,profileFor,savedProfile} = require('./paper-profiles');
 const {parsePrintedAt} = require('./print-time');
 const {compose} = require('./text-print');
 const tokens = require('./tokens');
+const {SignalBus} = require('./signal-bus');
+const {createAdapters} = require('./adapters');
 let selectedPaper = 'roll57';
 const settingsFile = () => path.join(app.getPath('userData'),'paper-settings.json');
 async function loadPaper() { try { selectedPaper=savedProfile(JSON.parse(await fs.readFile(settingsFile(),'utf8'))); } catch { selectedPaper='roll57'; } }
@@ -25,13 +27,20 @@ const internetClock = new InternetClock();
 const receiptFormat = new Intl.DateTimeFormat('en-US', {timeZone:'America/Regina',year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
 let transitProvider=null, weatherProvider=null, cityInfoProvider=null, cityMapProvider=null, saskPowerProvider=null, cityPowerProvider=null;
 const trustedNow=()=>{try{return internetClock.now();}catch{return null;}};
+const bus = new SignalBus();
+let signalReady = null;
+function signals() {
+  if (!signalReady) signalReady = createAdapters({cacheDir: path.join(app.getPath('userData'), 'signals'), now: trustedNow, ...(selfTestDir ? {fetcher: async () => { throw new Error('Signals stay offline during self-test.'); }} : {})})
+    .then(list => { for (const adapter of list) { bus.register(adapter); adapter.start().catch(() => {}); } return bus; });
+  return signalReady;
+}
 function transitData(){if(!transitProvider){const {TransitProvider}=require('./transit-provider');transitProvider=new TransitProvider({cacheDir:path.join(app.getPath('userData'),'transit-cache'),now:trustedNow});transitProvider.start().catch(()=>{});}return transitProvider;}
 function weatherData(){if(!weatherProvider){const {WeatherProvider}=require('./weather-provider');weatherProvider=new WeatherProvider({cacheDir:path.join(app.getPath('userData'),'weather-cache'),now:trustedNow});weatherProvider.start().catch(()=>{});}return weatherProvider;}
 function cityInfoData(){if(!cityInfoProvider){const {CityInfoProvider}=require('./city-info-provider');cityInfoProvider=new CityInfoProvider();cityInfoProvider.start();}return cityInfoProvider;}
 function cityMapData(){if(!cityMapProvider){const {CityMapProvider}=require('./city-map-provider');cityMapProvider=new CityMapProvider();cityMapProvider.start();}return cityMapProvider;}
 function powerOutageData(){if(!saskPowerProvider){const {SaskPowerProvider}=require('./saskpower-provider');saskPowerProvider=new SaskPowerProvider();saskPowerProvider.start();}return saskPowerProvider;}
 function cityPowerData(){if(!cityPowerProvider){const {CityPowerProvider}=require('./city-power-provider');cityPowerProvider=new CityPowerProvider();}return cityPowerProvider;}
-app.on('before-quit',()=>{transitProvider?.stop();weatherProvider?.stop();cityInfoProvider?.stop();cityMapProvider?.stop();saskPowerProvider?.stop();cityPowerProvider?.stop();announcements.stop();});
+app.on('before-quit',()=>{bus.stopAll();transitProvider?.stop();weatherProvider?.stop();cityInfoProvider?.stop();cityMapProvider?.stop();saskPowerProvider?.stop();cityPowerProvider?.stop();announcements.stop();});
 const REMOTE_IMAGES=Object.freeze([
   /^https:\/\/tile\.openstreetmap\.org\/\d{1,2}\/\d+\/\d+\.png$/,
   /^https:\/\/[abc]\.tile\.opentopomap\.org\/\d{1,2}\/\d+\/\d+\.png$/,
@@ -195,6 +204,8 @@ async function handlePrint(event, ask = () => dialog.showMessageBox(window, PRIN
     const token = await tokens.current();
     const issuedAt = token ? token.issuedAt : stamp;
     const preview = await renderReceipt(issuedAt);
+    internetClock.now();
+    if(!transitData().serviceHours().allowed)return {ok:false,message:'Scheduled service availability changed. Nothing was printed.'};
     const expiry = new Date(issuedAt + 90 * 60 * 1000);
     const parts = Object.fromEntries(receiptFormat.formatToParts(expiry).map(part => [part.type, part.value]));
     const raster = compose({
@@ -204,8 +215,6 @@ async function handlePrint(event, ask = () => dialog.showMessageBox(window, PRIN
       barcode: token ? token.payload : null,
       logo: preview.logoRaster
     });
-    internetClock.now();
-    if(!transitData().serviceHours().allowed)return {ok:false,message:'Scheduled service availability changed. Nothing was printed.'};
     const result = await sendRaster(raster);
     return {ok: true, message: 'Sample sent to M860 (job ' + result.jobId + '). Check the paper before printing again.'};
   } catch (error) { return {ok: false, message: error.message}; }
@@ -263,6 +272,9 @@ async function start() {
   ipcMain.handle('sample:service-hours', event=>{if(!isTrusted(event))throw Error('Untrusted request.');return transitData().serviceHours();});
   ipcMain.handle('sample:time', event => { if (!isTrusted(event)) throw new Error('Untrusted request.'); return internetClock.snapshot(); });
   ipcMain.handle('sample:status', event => { if (!isTrusted(event)) throw new Error('Untrusted request.'); return printerStatus(); });
+  ipcMain.handle('sample:signal', async event => { if (!isTrusted(event)) throw new Error('Untrusted request.'); await signals(); return bus.summary(); });
+  ipcMain.handle('sample:signal:recheck', async (event, id) => { if (!isTrusted(event) || typeof id !== 'string' || id.length > 40) throw new Error('Invalid source.'); const adapter = (await signals()).get(id); if (!adapter) throw new Error('Unknown source.'); return adapter.refresh(); });
+  ipcMain.handle('sample:signal:recent', async (event, id) => { if (!isTrusted(event) || typeof id !== 'string' || id.length > 40) throw new Error('Invalid source.'); const adapter = (await signals()).get(id); if (!adapter?.ring) throw new Error('No trail for that source.'); return adapter.ring.recent(80); });
   ipcMain.handle('sample:print', async (event, options) => {
     const result = await handlePrint(event, undefined, options);
     if (!result.ok) await dialog.showMessageBox(window, {type: 'error', title: 'Printer', message: result.message, buttons: ['OK']});

@@ -35,7 +35,7 @@ assert.ok(flat.includes(Buffer.from([GS, 0x77, 3])), 'module width must be set.'
 assert.ok(flat.includes(Buffer.from([GS, 0x68, 80])), 'bar height must be set.');
 
 // --- tail ---------------------------------------------------------------
-assert.deepEqual([...flat.subarray(flat.length - 2)], [ESC, 0x64], 'stream must end with a feed command.');
+assert.deepEqual([...flat.subarray(flat.length - 3)], [ESC, 0x64, 4], 'stream must end with a four-line feed.');
 
 // --- logo splice --------------------------------------------------------
 const logo = {chunks: [Buffer.from([GS, 0x76, 0x30, 0])]};
