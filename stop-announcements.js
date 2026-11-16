@@ -1,6 +1,6 @@
 'use strict';
-const path=require('node:path');
 const {spawn}=require('node:child_process');
+const {helperPath}=require('./runtime-paths');
 function distance(a,b){const rad=Math.PI/180,x=(b.latitude-a.latitude)*rad,y=(b.longitude-a.longitude)*rad,s=Math.sin(x/2)**2+Math.cos(a.latitude*rad)*Math.cos(b.latitude*rad)*Math.sin(y/2)**2;return 6371000*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));}
 class ApproachGate{
  constructor(){this.seen=new Map();this.previous=new Map();}
@@ -24,7 +24,7 @@ class WindowsAnnouncements{
  stop(){this.target=null;if(this.child){this.child.kill();this.child=null;}}
  run(payload){return new Promise(resolve=>{
   let settled=false,output='';const finish=result=>{if(settled)return;settled=true;clearTimeout(timer);if(this.child===child)this.child=null;resolve(result);};let child;
-  try{child=this.spawnProcess(path.join(__dirname,'AnnouncementVoice.exe'),[],{windowsHide:true,shell:false,stdio:['pipe','pipe','pipe']});}catch{return resolve({available:false,error:'Windows voice unavailable'});}
+  try{child=this.spawnProcess(helperPath('AnnouncementVoice.exe'),[],{windowsHide:true,shell:false,stdio:['pipe','pipe','pipe']});}catch{return resolve({available:false,error:'Windows voice unavailable'});}
   if(payload.mode==='speak')this.child=child;const timer=setTimeout(()=>{child.kill();finish({available:false,error:'Voice timed out'});},20000);
   child.stdout.on('data',x=>{output+=x.toString();if(output.length>8192){child.kill();finish({available:false,error:'Unexpected voice output'});}});child.stderr.on('data',()=>{});
   child.once('error',()=>finish({available:false,error:'Windows voice unavailable'}));child.once('close',code=>{try{const result=JSON.parse(output.trim());finish(code===0?result:{available:false,error:'Windows voice unavailable'});}catch{finish({available:false,error:'Windows voice unavailable'});}});
