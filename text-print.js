@@ -56,3 +56,12 @@ function compose({time, date, terms, barcode = null, logo = null}) {
 
   for (const line of Array.isArray(terms) ? terms : wrap(terms)) {
     if (line.length > COLS) throw new Error('Terms line too wide for font B: "' + line + '"');
+    stream.line(line);
+  }
+  if (barcode) stream.align(1).barcode(String(barcode));
+  stream.feed(4);
+  const chunks = stream.parts;
+  return {chunks, bytes: chunks.reduce((total, chunk) => total + chunk.length, 0)};
+}
+
+module.exports = {compose, wrap, COLS};

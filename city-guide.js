@@ -154,7 +154,7 @@
  topbar.append(brand,tabs,topRight);
  document.body.prepend(topbar);
  const paneHost=make('div','panes'),panes=new Map(),tabButtons=new Map();
- const TABS=[['near','near'],['route','route'],['bus','bus'],['wifi','wi-fi'],['places','places'],['mail','mail'],['cams','cams'],['city','city']];
+ const TABS=[['near','near'],['route','route'],['bus','bus'],['wifi','wi-fi'],['places','places'],['mail','mail'],['cams','cams'],['city','city'],['signal','signal']];
  const paneOpen=new Map();
  for(const[id,label]of TABS){
   const b=button(label,'tab');b.setAttribute('role','tab');b.id='tab-'+id;b.setAttribute('aria-controls','pane-'+id);b.addEventListener('click',()=>show(id));tabs.append(b);tabButtons.set(id,b);
@@ -166,6 +166,8 @@
   current=id;save('tab',id);
   for(const[key,p]of panes)p.hidden=key!==id;
   for(const[key,b]of tabButtons){b.setAttribute('aria-selected',String(key===id));b.tabIndex=key===id?0:-1;}
+  if(id==='signal')html.dataset.view='terminal';
+  else if(html.dataset.view==='terminal')delete html.dataset.view;
   paneOpen.get(id)?.();
  }
  tabs.addEventListener('keydown',e=>{if(e.key!=='ArrowRight'&&e.key!=='ArrowLeft')return;const ids=TABS.map(t=>t[0]),i=ids.indexOf(current),n=ids[(i+(e.key==='ArrowRight'?1:ids.length-1))%ids.length];show(n);tabButtons.get(n).focus();e.preventDefault();});
@@ -743,6 +745,8 @@
  loadStops().then(()=>{if(current==='near')renderNear();});loadRoutes();
  refreshMapData();refreshCityInfo();refreshPower();
  setInterval(refreshMapData,5*60*1000);setInterval(refreshTrains,60*1000);setInterval(()=>refreshScooters(false),60*1000);setInterval(refreshCityInfo,10*60*1000);setInterval(refreshPower,5*60*1000);
+ const signalPane=panes.get('signal'),terminal=document.getElementById('signal-terminal');
+ if(signalPane&&terminal){signalPane.append(terminal);terminal.hidden=false;}
  show(saved('tab','near'));
  window.cityGuide=Object.freeze({show,openCam,closeCam,setLayer,setBasemap,setHere,setEndpoint,runPlan,query,hoursState,trainTimes,refreshMapData,refreshCityInfo,refreshPower,mapLayers:()=>({closures:closureLayer,construction:workLayer,power:powerLayer,facilities:facilityLayer,trip:tripLayer}),preview:()=>dialogPreview});
 })();

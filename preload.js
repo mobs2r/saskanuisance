@@ -26,5 +26,8 @@ contextBridge.exposeInMainWorld('sampleApp', Object.freeze({
   paper: () => ipcRenderer.invoke('sample:paper:get'),
   openLink: key => ipcRenderer.invoke('sample:open-link', key),
   plan: request => ipcRenderer.invoke('sample:plan', request),
-  setPaper: id => ipcRenderer.invoke('sample:paper:set', id)
+  setPaper: id => ipcRenderer.invoke('sample:paper:set', id),
+  signal: () => ipcRenderer.invoke('sample:signal'),
+  recheckSource: id => ipcRenderer.invoke('sample:signal:recheck', id),
+  sourceTrail: id => ipcRenderer.invoke('sample:signal:recent', id)
 }));

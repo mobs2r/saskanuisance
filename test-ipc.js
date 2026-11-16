@@ -1,6 +1,6 @@
 'use strict';
-const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict'),{pathToFileURL}=require('node:url');
-const out=path.join(__dirname,'..','electron-test-v1.6-offline','ipc-profile');fs.mkdirSync(out,{recursive:true});
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict'),{pathToFileURL}=require('node:url');
+const out=path.join(os.tmpdir(),'electron-test-v1.6-offline','ipc-profile');fs.mkdirSync(out,{recursive:true});
 const handlers=new Map(),events=new Map();let requestGuard,headersGuard,currentWindow,openedLinks=[],started={transit:0,weather:0};
 const time=Date.parse('2026-11-11T04:30Z');
 class Clock{now(){return time}sync(){return Promise.resolve(this.snapshot())}snapshot(){return {status:'synced',epochMs:time}}invalidate(){}}
