@@ -8,9 +8,60 @@
   "scripts": {
     "test": "node test-adapter.js && node test-signal-bus.js && node test-compose.js && node test.js && node test-clock.js && node test-weather.js && node test-transit.js && node test-bus-motion.js && node test-ipc.js && node test-theme.js && node test-service-hours.js && node test-observed-arrivals.js && node test-route-motion.js && node test-route-planner.js && node test-live-feeds.js",
     "build": "node scripts/verify-build.js",
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --x64"
   },
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "ca.yxe.saskanuisance",
+    "productName": "Saskanuisance",
+    "asar": true,
+    "asarUnpack": [
+      "ReceiptPrint.exe",
+      "AnnouncementVoice.exe",
+      "raw-print.ps1"
+    ],
+    "files": [
+      "**/*",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/node_modules/.bin",
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+      "!**/._*",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
+      "!**/{appveyor.yml,.travis.yml,circle.yml}",
+      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}",
+      "!.github/**",
+      "!scripts/**",
+      "!test.js",
+      "!test-*.js",
+      "!**/*.{bak,backup}",
+      "!**/*backup*",
+      "!**/*~",
+      "!dist/**",
+      "!out/**"
+    ],
+    "win": {
+      "icon": "icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "shortcutName": "Saskanuisance"
+    }
   }
 }

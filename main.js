@@ -14,6 +14,7 @@ const {compose} = require('./text-print');
 const tokens = require('./tokens');
 const {SignalBus} = require('./signal-bus');
 const {createAdapters} = require('./adapters');
+const {helperPath} = require('./runtime-paths');
 let selectedPaper = 'roll57';
 const settingsFile = () => path.join(app.getPath('userData'),'paper-settings.json');
 async function loadPaper() { try { selectedPaper=savedProfile(JSON.parse(await fs.readFile(settingsFile(),'utf8'))); } catch { selectedPaper='roll57'; } }
@@ -97,7 +98,7 @@ async function printerStatus() {
 function sendRaster(raster, mode = 'Print') {
   if (mode === 'Print') printHelperCalls++;
   return new Promise((resolve, reject) => {
-    const executable = path.join(__dirname, 'ReceiptPrint.exe');
+    const executable = helperPath('ReceiptPrint.exe');
     const child = spawn(executable, [mode === 'Status' ? '--status' : mode === 'DryRun' ? '--dry-run' : '--print'], {windowsHide: true, shell: false, stdio: ['pipe', 'pipe', 'pipe']});
     let output = '', errors = '';
     let settled = false;
