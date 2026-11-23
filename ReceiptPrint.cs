@@ -21,7 +21,7 @@ public static class ReceiptPrint {
   static string Escape(string text) { return text.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", " ").Replace("\n", " "); }
   static void Check(bool success, string step) { if (!success) throw new Win32Exception(Marshal.GetLastWin32Error(), step); }
   static bool Match(byte[] bytes, int start, byte[] pattern) {
-    if (start + pattern.Length > bytes.Length) return false;
+    if (start < 0 || start + pattern.Length > bytes.Length) return false;
     for (int i = 0; i < pattern.Length; i++) if (bytes[start + i] != pattern[i]) return false;
     return true;
   }
