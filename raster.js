@@ -1,14 +1,17 @@
 'use strict';
 const ROWS = 64;
 const THRESHOLD = 200;          // high: strips the AA fringe, keeps a hard 1-dot step
+const WIDTH = 448;
 
-function binarize(bgra, width, height) {
+function binarize(bgra, width, height, offset = 0) {
   const rowBytes = width / 8;
   const bits = Buffer.alloc(rowBytes * height);
   for (let y = 0; y < height; y++) {
     const src = y * width * 4, dst = y * rowBytes;
     for (let x = 0; x < width; x++) {
-      const i = src + x * 4;
+      const sx = x - offset;
+      if (sx < 0 || sx >= width) continue;
+      const i = src + sx * 4;
       const a = bgra[i + 3] / 255;
       const luma = (0.114 * bgra[i] + 0.587 * bgra[i + 1] + 0.299 * bgra[i + 2]) * a + 255 * (1 - a);
       if (luma < THRESHOLD) bits[dst + (x >> 3)] |= 0x80 >> (x & 7);
@@ -47,11 +50,11 @@ function cut(profile) {
 }
 
 function rasterize(bgra, width, height, profile) {
-  if (width !== profile.width) throw new Error('Width does not match the paper profile.');
+  if (!profile || width !== profile.width) throw new Error('Width does not match the paper profile.');
   if (!Number.isInteger(height) || height < 1 || height > 2400) throw new Error('Invalid receipt height.');
   if (!Buffer.isBuffer(bgra) || bgra.length !== width * height * 4) throw new Error('Invalid pixel data.');
 
-  const { bits, rowBytes } = binarize(bgra, width, height);
+  const { bits, rowBytes } = binarize(bgra, width, height, profile.horizontalOffsetDots ?? 0);
   const body = bloom(bits, rowBytes, height);
 
   const chunks = [init(profile)];
@@ -65,4 +68,4 @@ function rasterize(bgra, width, height, profile) {
   return { width, height, chunks, bytes: chunks.reduce((n, c) => n + c.length, 0) };
 }
 
-module.exports = { rasterize, ROWS, THRESHOLD };
+module.exports = { rasterize, init, cut, ROWS, WIDTH, THRESHOLD };
