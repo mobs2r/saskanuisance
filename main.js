@@ -8,7 +8,7 @@ const {rasterize, WIDTH} = require('./raster');
 const {InternetClock} = require('./internet-clock');
 const {WindowsAnnouncements}=require('./stop-announcements');
 const announcements=new WindowsAnnouncements();
-const {PROFILES,profileFor,savedProfile} = require('./paper-profiles');
+const {PROFILE,profileFor,savedProfile} = require('./paper-profiles');
 const {parsePrintedAt} = require('./print-time');
 const {compose} = require('./text-print');
 const tokens = require('./tokens');
@@ -22,7 +22,7 @@ async function savePaper(id) {
   profileFor(id); if(busy) throw new Error('Finish the print dialog before changing paper.');
   await fs.mkdir(app.getPath('userData'),{recursive:true});
   await fs.writeFile(settingsFile(),JSON.stringify({version:1,profile:id},null,2),'utf8');
-  selectedPaper=id; return {selected:selectedPaper,profiles:PROFILES};
+  selectedPaper=id; return {selected:selectedPaper,profiles:[PROFILE]};
 }
 const internetClock = new InternetClock();
 const receiptFormat = new Intl.DateTimeFormat('en-US', {timeZone:'America/Regina',year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
@@ -139,7 +139,7 @@ async function captureHidden(win, rectangle) {
 }
 async function renderReceipt(now = internetClock.now(), paperId = selectedPaper) {
   const paper = profileFor(paperId);
-  const renderer = new BrowserWindow({show: false, width: paper.rasterWidth, height: 1000, useContentSize: true, backgroundColor: '#ffffff', webPreferences: {nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false, offscreen: true}});
+  const renderer = new BrowserWindow({show: false, width: paper.width, height: 1000, useContentSize: true, backgroundColor: '#ffffff', webPreferences: {nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false, offscreen: true}});
   secureWindow(renderer);
   try {
     await renderer.loadFile(htmlPath, {query: {render: '1'}});
@@ -169,17 +169,17 @@ async function renderReceipt(now = internetClock.now(), paperId = selectedPaper)
     if(details.contentBounds.some(item=>item.left < -.05 || item.right > details.trimX + .05)) throw new Error('Original-size content does not fit this paper layout. Printing stopped instead of shrinking or clipping.');
     const height = Math.ceil(details.height * ZOOM);
     if (height < 500 || height > 1600) throw new Error('Unexpected receipt size. Printing stopped.');
-    renderer.setContentSize(paper.rasterWidth, height);
+    renderer.setContentSize(paper.width, height);
     await delay(120);
-    const captured = await captureHidden(renderer,{x: 0, y: 0, width: paper.rasterWidth, height});
-    const image = captured.resize({width: paper.rasterWidth, height, quality: 'best'});
-    const raster = rasterize(image.toBitmap(), paper.rasterWidth, height, paper.horizontalOffsetDots ?? 0);
+    const captured = await captureHidden(renderer,{x: 0, y: 0, width: paper.width, height});
+    const image = captured.resize({width: paper.width, height, quality: 'best'});
+    const raster = rasterize(image.toBitmap(), paper.width, height, paper);
     const logoBox = details.contentBounds.find(item => item.selector === '.logo');
     const logoCss = Math.max(1, details.logoWidth * (201 / 800));
-    const logoCapture = await captureHidden(renderer, {x: 0, y: Math.max(0, Math.floor(logoBox.top)), width: Math.round(paper.rasterWidth / ZOOM), height: Math.ceil(logoCss)});
+    const logoCapture = await captureHidden(renderer, {x: 0, y: Math.max(0, Math.floor(logoBox.top)), width: Math.round(paper.width / ZOOM), height: Math.ceil(logoCss)});
     const logoHeight = Math.max(1, Math.ceil(logoCss * ZOOM));
-    const logoImage = logoCapture.resize({width: paper.rasterWidth, height: logoHeight, quality: 'best'});
-    const logoRaster = rasterize(logoImage.toBitmap(), paper.rasterWidth, logoHeight, paper.horizontalOffsetDots ?? 0);
+    const logoImage = logoCapture.resize({width: paper.width, height: logoHeight, quality: 'best'});
+    const logoRaster = rasterize(logoImage.toBitmap(), paper.width, logoHeight, paper);
     return {image, raster, logoRaster, details};
   } finally { renderer.destroy(); }
 }
@@ -211,10 +211,11 @@ async function handlePrint(event, ask = () => dialog.showMessageBox(window, PRIN
     const parts = Object.fromEntries(receiptFormat.formatToParts(expiry).map(part => [part.type, part.value]));
     const raster = compose({
       time: parts.hour + ':' + parts.minute + ' ' + parts.dayPeriod,
-      date: (parts.month + ' ' + parts.day + ', ' + parts.year).toUpperCase(),
+      date: (parts.month + ' ' + parts.day + ',' + parts.year).toUpperCase(),
       terms: preview.details.footerLines.map(line => line.text),
-      barcode: token ? token.payload : null,
-      logo: preview.logoRaster
+      barcode: null,
+      logo: preview.logoRaster,
+      profile: profileFor(selectedPaper)
     });
     const result = await sendRaster(raster);
     return {ok: true, message: 'Sample sent to M860 (job ' + result.jobId + '). Check the paper before printing again.'};
@@ -264,7 +265,7 @@ async function start() {
   ipcMain.handle('sample:scooters',async event=>{if(!isTrusted(event))throw new Error('Untrusted request.');return liveFeeds().scooters.get();});
   ipcMain.handle('sample:power-outages',async event=>{if(!isTrusted(event))throw new Error('Untrusted request.');return powerOutageData().refresh();});
   ipcMain.handle('sample:city-power-updates',async event=>{if(!isTrusted(event))throw new Error('Untrusted request.');return cityPowerData().refresh();});
-  ipcMain.handle('sample:paper:get', event => { if(!isTrusted(event)) throw new Error('Untrusted request.'); return {selected:selectedPaper,profiles:PROFILES}; });
+  ipcMain.handle('sample:paper:get', event => { if(!isTrusted(event)) throw new Error('Untrusted request.'); return {selected:selectedPaper,profiles:[PROFILE]}; });
   ipcMain.handle('sample:paper:set', (event,id) => { if(!isTrusted(event)) throw new Error('Untrusted request.'); return savePaper(id); });
   ipcMain.handle('sample:tokens:get', async event => { if(!isTrusted(event)) throw new Error('Untrusted request.'); return tokens.load(); });
   ipcMain.handle('sample:tokens:add', async (event, input) => { if(!isTrusted(event)) throw new Error('Untrusted request.'); return tokens.add(input ?? {}); });
@@ -377,6 +378,6 @@ async function selfTest() {
   await delay(200);
   const screenshot = await captureHidden(window,undefined);
   await fs.writeFile(path.join(selfTestDir, 'app-preview.png'), screenshot.toPNG());
-  await fs.writeFile(path.join(selfTestDir, 'self-test.json'), JSON.stringify({ok: true, electron: process.versions.electron, receipt: receipt.details, dimensions: receipt.image.getSize(), chunks: receipt.raster.chunks.map(chunk => chunk.length), dryRun, yearRollover: rollover.details.dateText, customTime: fixed.details, cancel, repeated, staleUi, syncedUi, internetTime: internetClock.snapshot(), centered, printConfirmation: PRINT_CONFIRM, security, printHelperCalls, paperProfiles: PROFILES, narrow: narrow.details, narrowDimensions: narrow.image.getSize(), narrowDryRun, paperDialog, reducedMotion, brandUi, printer: originalPrinterStatus}, null, 2));
+  await fs.writeFile(path.join(selfTestDir, 'self-test.json'), JSON.stringify({ok: true, electron: process.versions.electron, receipt: receipt.details, dimensions: receipt.image.getSize(), chunks: receipt.raster.chunks.map(chunk => chunk.length), dryRun, yearRollover: rollover.details.dateText, customTime: fixed.details, cancel, repeated, staleUi, syncedUi, internetTime: internetClock.snapshot(), centered, printConfirmation: PRINT_CONFIRM, security, printHelperCalls, paperProfiles: [PROFILE], narrow: narrow.details, narrowDimensions: narrow.image.getSize(), narrowDryRun, paperDialog, reducedMotion, brandUi, printer: originalPrinterStatus}, null, 2));
   app.quit();
 }
