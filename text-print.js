@@ -1,5 +1,5 @@
 'use strict';
-const {rasterize} = require('./raster');
+const {init: initStream, cut: cutStream} = require('./raster');
 
 const ESC = 0x1b, GS = 0x1d;
 const COLS = 49;                        // font B is 9 dots wide; 448 / 9 = 49
@@ -38,13 +38,15 @@ function wrap(text, cols = COLS) {
   return out;
 }
 
-function compose({time, date, terms, barcode = null, logo = null}) {
+function compose({time, date, terms, barcode = null, logo = null, profile}) {
+  if (!profile) throw new Error('Receipt needs a paper profile.');
   if (!time || !date) throw new Error('Receipt needs a time and a date.');
   if (time.length > 12) throw new Error('Receipt time is too long.');
   if (date.length > 14) throw new Error('Receipt date is too long.');
 
   const stream = new Stream();
-  stream.init().fontB().align(1);
+  stream.parts.push(initStream(profile));
+  stream.fontB().align(1);
 
   if (logo) for (const chunk of logo.chunks) stream.parts.push(chunk);
 
@@ -60,6 +62,7 @@ function compose({time, date, terms, barcode = null, logo = null}) {
   }
   if (barcode) stream.align(1).barcode(String(barcode));
   stream.feed(4);
+  stream.parts.push(cutStream(profile));
   const chunks = stream.parts;
   return {chunks, bytes: chunks.reduce((total, chunk) => total + chunk.length, 0)};
 }
