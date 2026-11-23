@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 public static class ReceiptPrint {
   const string Printer = "M860 USB Text Test";
+  const int RowBytes = 56;                 // 448 dots
   [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
   struct DocInfo { [MarshalAs(UnmanagedType.LPWStr)] public string name; [MarshalAs(UnmanagedType.LPWStr)] public string output; [MarshalAs(UnmanagedType.LPWStr)] public string datatype; }
   [DllImport("winspool.drv", EntryPoint="OpenPrinterW", SetLastError=true, CharSet=CharSet.Unicode)] static extern bool OpenPrinter(string name, out IntPtr handle, IntPtr defaults);
@@ -19,7 +20,13 @@ public static class ReceiptPrint {
   [DllImport("winspool.drv", SetLastError=true)] static extern bool ClosePrinter(IntPtr handle);
   static string Escape(string text) { return text.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", " ").Replace("\n", " "); }
   static void Check(bool success, string step) { if (!success) throw new Win32Exception(Marshal.GetLastWin32Error(), step); }
-  static bool Equal(byte[] left, byte[] right) { if (left.Length != right.Length) return false; for(int i=0;i<left.Length;i++) if(left[i]!=right[i]) return false; return true; }
+  static bool Match(byte[] bytes, int start, byte[] pattern) {
+    if (start + pattern.Length > bytes.Length) return false;
+    for (int i = 0; i < pattern.Length; i++) if (bytes[start + i] != pattern[i]) return false;
+    return true;
+  }
+  static readonly byte[] Header = { 0x1b, 0x40, 0x1b, 0x37, 0x07, 0x78, 0x02, 0x1b, 0x61, 0x00, 0x1b, 0x4a };
+  static readonly byte[] Tail = { 0x1b, 0x4a, 0x58, 0x1d, 0x56, 0x42, 0x00 };
   [DllImport("cfgmgr32.dll", EntryPoint="CM_Locate_DevNodeW", CharSet=CharSet.Unicode)] static extern uint LocateNode(out uint node, string instance, uint flags);
   [DllImport("cfgmgr32.dll")] static extern uint CM_Get_DevNode_Status(out uint status, out uint problem, uint node, uint flags);
   static int ConnectionStatus() {
@@ -52,20 +59,23 @@ public static class ReceiptPrint {
         }
         if(reader.BaseStream.ReadByte()!=-1) throw new InvalidDataException("Unexpected trailing data.");
       }
-      if(!Equal(chunks[0],new byte[]{0x1b,0x40,0x1b,0x61,0,0x1b,0x4a,32}) || !Equal(chunks[chunks.Count-1],new byte[]{0x1b,0x4a,64})) throw new InvalidDataException("Invalid receipt framing.");
-      int expectedWidth=chunks[1].Length>=8 ? chunks[1][4] : 0;
+      // header: ESC @ ESC 7 <heat> ESC a 0 ESC J <top margin>
+      if(chunks[0].Length < 13 || !Match(chunks[0], 0, Header)) throw new InvalidDataException("Invalid receipt header.");
+      // tail: ESC J <feed> GS V B 0
+      byte[] tail = chunks[chunks.Count - 1];
+      if(!Match(tail, tail.Length - Tail.Length, Tail)) throw new InvalidDataException("Receipt is missing its cut.");
       for(int i=1;i<chunks.Count-1;i++) {
         byte[] c=chunks[i];
-        if(c.Length<8 || c[0]!=0x1d || c[1]!=0x76 || c[2]!=0x30 || c[3]!=0 || (c[4]!=59 && c[4]!=49 && c[4]!=52 && c[4]!=56) || c[4]!=expectedWidth || c[5]!=0) throw new InvalidDataException("Invalid raster header.");
+        if(c.Length<8 || c[0]!=0x1d || c[1]!=0x76 || c[2]!=0x30 || c[3]!=0 || c[4]!=RowBytes || c[5]!=0) throw new InvalidDataException("Invalid raster header.");
         int rows=c[6]+256*c[7];
-        if(rows<1 || rows>64 || c.Length!=8+expectedWidth*rows) throw new InvalidDataException("Invalid raster block.");
+        if(rows<1 || rows>64 || c.Length!=8+RowBytes*rows) throw new InvalidDataException("Invalid raster block.");
       }
       if(args[0]=="--dry-run") {
         Console.WriteLine("{\"ok\":true,\"dryRun\":true,\"printerOpened\":false,\"chunks\":"+chunks.Count+",\"bytes\":"+total+"}");
         return 0;
       }
       Check(OpenPrinter(Printer,out handle,IntPtr.Zero),"Cannot open the M860 printer.");
-      var doc=new DocInfo {name="SAMPLE - NOT VALID (one receipt)",output=null,datatype="RAW"};
+      var doc=new DocInfo {name="Saskatoon Transit - Proof of Payment",output=null,datatype="RAW"};
       int job=StartDocPrinter(handle,1,ref doc);
       Check(job>0,"Cannot start a print job.");
       started=true;
@@ -92,4 +102,3 @@ public static class ReceiptPrint {
     }
   }
 }
-
