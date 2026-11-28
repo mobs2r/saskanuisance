@@ -1,12 +1,12 @@
 {
   "name": "sample-receipt",
   "productName": "Saskanuisance",
-  "version": "1.8.8",
+  "version": "1.8.9",
   "description": "Local receipt sample, official Saskatoon transit and ECCC weather.",
   "main": "main.js",
   "private": true,
   "scripts": {
-    "test": "node test-adapter.js && node test-signal-bus.js && node test-compose.js && node test.js && node test-clock.js && node test-weather.js && node test-transit.js && node test-bus-motion.js && node test-ipc.js && node test-theme.js && node test-service-hours.js && node test-observed-arrivals.js && node test-route-motion.js && node test-route-planner.js && node test-live-feeds.js && node test-renderer-ids.js && node test-render-cost.js && node test-print-raster.js && node test-cameras.js",
+    "test": "node test-adapter.js && node test-signal-bus.js && node test-compose.js && node test.js && node test-clock.js && node test-weather.js && node test-transit.js && node test-bus-motion.js && node test-ipc.js && node test-theme.js && node test-service-hours.js && node test-observed-arrivals.js && node test-route-motion.js && node test-route-planner.js && node test-live-feeds.js && node test-renderer-ids.js && node test-render-cost.js && node test-print-raster.js && node test-cameras.js && node test-receipt-fit.js",
     "build": "node scripts/verify-build.js",
     "start": "electron .",
     "dist": "electron-builder --win nsis --x64 --publish never"

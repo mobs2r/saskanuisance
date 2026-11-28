@@ -36,16 +36,15 @@
       canvas.style.width = Math.max(1, Math.round(drawn.width * cssScale)) + 'px';
       canvas.style.height = drawn.height + 'px';
     }
-    const source = document.createElement('span');
-    source.className = 'receipt-source';
-    source.textContent = value;
-    node.replaceChildren(canvas, source);
+    // Fallback text stays inside the canvas so the fit check measures the bitmap, not a second text box.
+    canvas.textContent = value;
+    node.replaceChildren(canvas);
     if (node.getAttribute('aria-label') !== value) node.setAttribute('aria-label', value);
   }
   function paintStaticReceipt() {
     paintBitmap(document.querySelector('.heading'), 'Proof of Payment', 2, 1);
     paintBitmap(document.querySelector('.valid-label'), 'Valid Until:', 2, 1);
-    for (const line of document.querySelectorAll('.terms-line')) paintBitmap(line, line.querySelector('.receipt-source')?.textContent || line.textContent, 1, 0, 0.75);
+    for (const line of document.querySelectorAll('.terms-line')) paintBitmap(line, line.textContent, 1, 0, 0.75);
   }
 
   const zone = 'America/Regina';
@@ -67,7 +66,7 @@
     const nextReceiptText = parts.hour + ':' + parts.minute + ' ' + parts.dayPeriod + '|' + parts.month + ' ' + parts.day + ',' + parts.year;
     if(nextReceiptText !== lastReceiptText) {
       paintBitmap(timeNode, parts.hour + ':' + parts.minute + ' ' + parts.dayPeriod, 2, 1);
-      paintBitmap(dateNode, parts.month + ' ' + parts.day + ',' + parts.year, 2, 1);
+      paintBitmap(dateNode, (parts.month + ' ' + parts.day + ',' + parts.year).toUpperCase(), 2, 1);
       lastReceiptText = nextReceiptText;
     }
     const iso = expiry.toISOString(); if (timeNode.dateTime !== iso) { timeNode.dateTime = iso; dateNode.dateTime = iso; }
