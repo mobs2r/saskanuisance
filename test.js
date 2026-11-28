@@ -48,6 +48,7 @@ const helperHost = process.platform === 'win32';
 function runHelper(args, input) { return spawnSync(helper, args, {input, windowsHide: true, encoding: 'utf8'}); }
 if (helperHost) {
 const dryRun = runHelper(['--dry-run'], wire(blank.chunks));
+if (dryRun.status !== 0) { console.error(dryRun.stdout); console.error(dryRun.stderr); }
 assert.equal(dryRun.status, 0);
 assert.equal(JSON.parse(dryRun.stdout).printerOpened, false);
 assert.equal(JSON.parse(dryRun.stdout).bytes, blank.bytes);
@@ -71,5 +72,5 @@ assert.match(style,/animation: none !important/);
 console.log('PASS: supported paper profile, wrong-width rejection, and reduced-motion stylesheet. No printer opened.');
 
 const single=rasterize(Buffer.alloc(448*130*4,255),448,130,profileFor('roll57'));
-if (helperHost) { const singleCheck=runHelper(['--dry-run'],wire(single.chunks));assert.equal(singleCheck.status,0);assert.equal(JSON.parse(singleCheck.stdout).printerOpened,false);console.log('PASS 448-dot single 57 mm native dry run.'); }
+if (helperHost) { const singleCheck=runHelper(['--dry-run'],wire(single.chunks));if(singleCheck.status!==0){console.error(singleCheck.stdout);console.error(singleCheck.stderr);}assert.equal(singleCheck.status,0);assert.equal(JSON.parse(singleCheck.stdout).printerOpened,false);console.log('PASS 448-dot single 57 mm native dry run.'); }
 else console.log('SKIP: 448-dot native dry run runs on Windows.');

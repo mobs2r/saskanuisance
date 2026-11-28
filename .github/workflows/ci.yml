@@ -19,6 +19,16 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Compile ReceiptPrint.exe
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $csc = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          if (-not (Test-Path -LiteralPath $csc)) {
+            $csc = 'C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe'
+          }
+          & $csc /nologo /optimize+ /out:ReceiptPrint.exe ReceiptPrint.cs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - run: npm test
       - run: npm run build
 
@@ -32,6 +42,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Compile ReceiptPrint.exe
+        shell: pwsh
+        run: |
+          $csc = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          if (-not (Test-Path -LiteralPath $csc)) {
+            $csc = 'C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe'
+          }
+          & $csc /nologo /optimize+ /out:ReceiptPrint.exe ReceiptPrint.cs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - run: npm run dist
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
