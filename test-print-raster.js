@@ -1,11 +1,11 @@
 'use strict';
-// A real print is native printer text plus the logo raster, not a screenshot of the screen font.
+// A real print is the on-screen ticket, drawn with a hard bitmap font and then rasterized.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const {spawnSync} = require('node:child_process');
-const {compose} = require('./text-print');
 const {rasterize} = require('./raster');
+const {rasterText} = require('./bitmap-font');
 const {profileFor} = require('./paper-profiles');
 const {validateChunks} = require('./receipt-chunks');
 const paper = profileFor('roll57');
@@ -34,22 +34,40 @@ function dryRun(chunks) {
   return parsed;
 }
 
-const logo = rasterize(Buffer.alloc(paper.width * 64 * 4, 255), paper.width, 64, paper);
-const terms = [
-  'Proof of Payment permits transfers prior',
-  'to time noted above. Present at boarding/',
-  'on request. Retain to avoid fines/removal.'
-];
-const job = compose({time: '12:48 PM', date: 'SEP 10,2026', terms, barcode: null, logo, profile: paper});
+function assertFlat(text) {
+  const drawn = rasterText(text, 2, 1);
+  assert.ok(drawn.pixels.every(pixel => pixel === 0 || pixel === 1));
+  return drawn;
+}
+const stem = assertFlat('l');
+const columns = new Set();
+for (let i = 0; i < stem.pixels.length; i++) if (stem.pixels[i]) columns.add(i % stem.width);
+assert.ok(columns.size <= 4, 'l is a straight stem, not a curved outline');
+assertFlat('i');
+const lines = ['Proof of Payment', 'Valid Until:', '12:48 PM', 'Sep 10,2026', 'Proof of Payment permits transfers prior', 'to time noted above. Present at boarding/', 'on request. Retain to avoid fines/removal.'];
+const drawnLines = lines.map((line, index) => rasterText(line, index < 4 ? 2 : 1, index < 4 ? 1 : 0));
+const height = 640;
+const bgra = Buffer.alloc(paper.width * height * 4, 255);
+let y0 = 40;
+for (const drawn of drawnLines) {
+  const x0 = Math.max(0, Math.floor((paper.width - drawn.width) / 2));
+  for (let y = 0; y < drawn.height && y0 + y < height; y++) {
+    for (let x = 0; x < drawn.width; x++) {
+      if (!drawn.pixels[y * drawn.width + x]) continue;
+      const pixel = ((y0 + y) * paper.width + x0 + x) * 4;
+      bgra[pixel] = bgra[pixel + 1] = bgra[pixel + 2] = 0;
+    }
+  }
+  y0 += drawn.height + 8;
+}
+const job = rasterize(bgra, paper.width, height, paper);
 validateChunks(job.chunks);
-assert.ok(job.chunks.length <= 41);
+assert.ok(job.chunks.length >= 3 && job.chunks.length <= 41);
 assert.ok(job.chunks.every(chunk => chunk.length >= 1 && chunk.length <= 3784));
 const rasterChunks = job.chunks.filter(isRaster);
-const textChunks = job.chunks.length - rasterChunks.length;
-assert.equal(rasterChunks.length, 1, 'a 64-row logo is one GS v 0 block');
-assert.ok(textChunks >= 1);
-assert.ok(Buffer.concat(job.chunks).includes(Buffer.from('Proof of Payment', 'ascii')));
-assert.ok(!job.chunks.some(chunk => chunk.length >= 8 && chunk[0] === 0x1b && chunk[1] === 0x40 && chunk !== job.chunks[0] && isRaster(chunk)));
+assert.equal(rasterChunks.length, job.chunks.length - 2, 'init and cut wrap the ticket raster');
+assert.equal(job.chunks[0][0], 0x1b);
+assert.equal(job.chunks.at(-1)[0], 0x1b);
 if (process.platform === 'win32') {
   const parsed = dryRun(job.chunks);
   assert.equal(parsed.bytes, job.bytes);
@@ -60,15 +78,15 @@ if (process.platform === 'win32') {
 
 const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
 const handle = main.slice(main.indexOf('async function handlePrint'), main.indexOf('let liveFeedSet'));
-assert.match(handle, /compose\(\{/);
-assert.match(handle, /logo: preview\.logoRaster/);
-assert.match(handle, /sendRaster\(raster\)/);
-assert.doesNotMatch(handle, /sendRaster\(preview\.raster\)/);
+assert.match(handle, /sendRaster\(preview\.raster\)/);
+assert.doesNotMatch(handle, /compose\(\{/);
 assert.match(handle, /internetClock\.now\(\)/);
 assert.match(handle, /serviceHours\(\)/);
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const renderer = fs.readFileSync(path.join(__dirname, 'renderer.js'), 'utf8');
-assert.match(html, /-webkit-font-smoothing:\s*none/);
+assert.match(html, /image-rendering:\s*pixelated/);
+assert.match(renderer, /imageSmoothingEnabled = false/);
+assert.match(renderer, /paintBitmap\(dateNode, parts\.month \+ ' ' \+ parts\.day \+ ',' \+ parts\.year, 2, 1\)/);
 assert.doesNotMatch(renderer, /dateGlyphs/);
-assert.match(renderer, /showReceiptText\(dateNode, \(parts\.month \+ ' ' \+ parts\.day \+ ',' \+ parts\.year\)\.toUpperCase\(\)\)/);
-console.log('PAYLOAD text chunks ' + textChunks + ', raster chunks ' + rasterChunks.length + ', total ' + job.chunks.length + ', bytes ' + job.bytes + (process.platform === 'win32' ? '. Dry run did not open a printer.' : '. Windows dry run skipped.'));
+assert.doesNotMatch(fs.readFileSync(path.join(__dirname, 'city-guide.js'), 'utf8'), /make\('b','','YXE'\)/);
+console.log('PAYLOAD raster chunks ' + rasterChunks.length + ', total ' + job.chunks.length + ', bytes ' + job.bytes + (process.platform === 'win32' ? '. Dry run did not open a printer.' : '. Windows dry run skipped.'));
