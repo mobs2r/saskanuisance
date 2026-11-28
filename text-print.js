@@ -6,9 +6,10 @@ const COLS = 49;                        // font B is 9 dots wide; 448 / 9 = 49
 
 class Stream {
   constructor() { this.parts = []; }
-  raw(...bytes) { this.parts.push(Buffer.from(bytes)); return this; }
-  ascii(text) { this.parts.push(Buffer.from(text, 'ascii')); return this; }
-  line(text = '') { return this.ascii(text).raw(0x0a); }
+  add(part) { if (part && part.length) this.parts.push(part); return this; }
+  raw(...bytes) { return this.add(Buffer.from(bytes)); }
+  ascii(text) { if (text) this.add(Buffer.from(text, 'ascii')); return this; }
+  line(text = '') { if (text) this.ascii(text); return this.raw(0x0a); }
   init() { return this.raw(ESC, 0x40); }
   fontB() { return this.raw(ESC, 0x4d, 0x01); }
   align(n) { return this.raw(ESC, 0x61, n); }
@@ -21,7 +22,7 @@ class Stream {
     this.raw(GS, 0x68, 80);                                       // bar height
     this.raw(GS, 0x77, 3);                                        // module width
     this.raw(GS, 0x6b, 73, payload.length + 2, 0x7b, 0x43);       // GS k, Code 128, {C
-    this.parts.push(payload);
+    this.add(payload);
     return this.raw(0x0a);
   }
 }
@@ -45,10 +46,10 @@ function compose({time, date, terms, barcode = null, logo = null, profile}) {
   if (date.length > 14) throw new Error('Receipt date is too long.');
 
   const stream = new Stream();
-  stream.parts.push(initStream(profile));
+  stream.add(initStream(profile));
   stream.fontB().align(1);
 
-  if (logo) for (const chunk of logo.chunks) stream.parts.push(chunk);
+  if (logo) for (const chunk of logo.chunks) stream.add(chunk);
 
   stream.size(2, 2).line('Proof of Payment');
   stream.size(1, 1).line();
@@ -62,7 +63,7 @@ function compose({time, date, terms, barcode = null, logo = null, profile}) {
   }
   if (barcode) stream.align(1).barcode(String(barcode));
   stream.feed(4);
-  stream.parts.push(cutStream(profile));
+  stream.add(cutStream(profile));
   const chunks = stream.parts;
   return {chunks, bytes: chunks.reduce((total, chunk) => total + chunk.length, 0)};
 }

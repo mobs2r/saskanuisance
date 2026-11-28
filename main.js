@@ -10,7 +10,6 @@ const {WindowsAnnouncements}=require('./stop-announcements');
 const announcements=new WindowsAnnouncements();
 const {PROFILE,profileFor,savedProfile} = require('./paper-profiles');
 const {parsePrintedAt} = require('./print-time');
-const {compose} = require('./text-print');
 const tokens = require('./tokens');
 const {SignalBus} = require('./signal-bus');
 const {createAdapters} = require('./adapters');
@@ -32,7 +31,6 @@ function scheduleSync() {
   syncTimer = setTimeout(async () => { await internetClock.sync(); scheduleSync(); }, internetClock.retryDelayMs());
   if (syncTimer.unref) syncTimer.unref();
 }
-const receiptFormat = new Intl.DateTimeFormat('en-US', {timeZone:'America/Regina',year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
 let transitProvider=null, weatherProvider=null, cityInfoProvider=null, cityMapProvider=null, saskPowerProvider=null, cityPowerProvider=null;
 const trustedNow=()=>{try{return internetClock.now();}catch{return null;}};
 const bus = new SignalBus();
@@ -97,6 +95,24 @@ function isTrusted(event) {
   try { return event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame && fileURLToPath(event.senderFrame.url) === htmlPath; }
   catch { return false; }
 }
+const RECEIPT_HEADER = Buffer.from([0x1b, 0x40, 0x1b, 0x37, 0x07, 0x78, 0x02, 0x1b, 0x61, 0x00, 0x1b, 0x4a]);
+const RECEIPT_TAIL = Buffer.from([0x1b, 0x4a, 0x58, 0x1d, 0x56, 0x42, 0x00]);
+const RECEIPT_ROW_BYTES = 56;
+function validateChunks(chunks) {
+  if (!Array.isArray(chunks) || chunks.length < 3 || chunks.length > 41) throw new Error('Invalid chunk count.');
+  for (const chunk of chunks) {
+    if (!Buffer.isBuffer(chunk) || chunk.length < 1 || chunk.length > 3784) throw new Error('Invalid block length.');
+  }
+  if (chunks[0].length < 13 || !chunks[0].subarray(0, RECEIPT_HEADER.length).equals(RECEIPT_HEADER)) throw new Error('Invalid receipt header.');
+  const tail = chunks[chunks.length - 1];
+  if (tail.length < RECEIPT_TAIL.length || !tail.subarray(tail.length - RECEIPT_TAIL.length).equals(RECEIPT_TAIL)) throw new Error('Receipt is missing its cut.');
+  for (let i = 1; i < chunks.length - 1; i++) {
+    const chunk = chunks[i];
+    if (chunk.length < 8 || chunk[0] !== 0x1d || chunk[1] !== 0x76 || chunk[2] !== 0x30 || chunk[3] !== 0 || chunk[4] !== RECEIPT_ROW_BYTES || chunk[5] !== 0) throw new Error('Invalid raster header.');
+    const rows = chunk[6] + 256 * chunk[7];
+    if (rows < 1 || rows > 64 || chunk.length !== 8 + RECEIPT_ROW_BYTES * rows) throw new Error('Invalid raster block.');
+  }
+}
 async function printerStatus() {
   const printers = await window.webContents.getPrintersAsync();
   const printer = printers.find(value => value.name === PRINTER);
@@ -105,6 +121,7 @@ async function printerStatus() {
   return {available: Boolean(printer), printer: PRINTER, status: printer?.status ?? null, connection: printer ? connection : 'unknown'};
 }
 function sendRaster(raster, mode = 'Print') {
+  if (mode !== 'Status') validateChunks(raster && raster.chunks);
   if (mode === 'Print') printHelperCalls++;
   return new Promise((resolve, reject) => {
     const executable = helperPath('ReceiptPrint.exe');
@@ -188,13 +205,7 @@ async function renderReceipt(now = internetClock.now(), paperId = selectedPaper)
     const captured = await captureHidden(renderer,{x: 0, y: 0, width: paper.width, height});
     const image = captured.resize({width: paper.width, height, quality: 'best'});
     const raster = rasterize(image.toBitmap(), paper.width, height, paper);
-    const logoBox = details.contentBounds.find(item => item.selector === '.logo');
-    const logoCss = Math.max(1, details.logoWidth * (201 / 800));
-    const logoCapture = await captureHidden(renderer, {x: 0, y: Math.max(0, Math.floor(logoBox.top)), width: Math.round(paper.width / ZOOM), height: Math.ceil(logoCss)});
-    const logoHeight = Math.max(1, Math.ceil(logoCss * ZOOM));
-    const logoImage = logoCapture.resize({width: paper.width, height: logoHeight, quality: 'best'});
-    const logoRaster = rasterize(logoImage.toBitmap(), paper.width, logoHeight, paper);
-    return {image, raster, logoRaster, details};
+    return {image, raster, details};
   } finally { renderer.destroy(); }
 }
 const PRINT_CONFIRM = Object.freeze({type: 'none', title: '', message: 'Are you ready to print?', buttons: ['Yes', 'No'], defaultId: 1, cancelId: 1, noLink: true});
@@ -221,17 +232,7 @@ async function handlePrint(event, ask = () => dialog.showMessageBox(window, PRIN
     const preview = await renderReceipt(issuedAt);
     internetClock.now();
     if(!transitData().serviceHours().allowed)return {ok:false,message:'Scheduled service availability changed. Nothing was printed.'};
-    const expiry = new Date(issuedAt + 90 * 60 * 1000);
-    const parts = Object.fromEntries(receiptFormat.formatToParts(expiry).map(part => [part.type, part.value]));
-    const raster = compose({
-      time: parts.hour + ':' + parts.minute + ' ' + parts.dayPeriod,
-      date: (parts.month + ' ' + parts.day + ',' + parts.year).toUpperCase(),
-      terms: preview.details.footerLines.map(line => line.text),
-      barcode: null,
-      logo: preview.logoRaster,
-      profile: profileFor(selectedPaper)
-    });
-    const result = await sendRaster(raster);
+    const result = await sendRaster(preview.raster);
     return {ok: true, message: 'Sample sent to M860 (job ' + result.jobId + '). Check the paper before printing again.'};
   } catch (error) { return {ok: false, message: error.message}; }
   finally { busy = false; }
