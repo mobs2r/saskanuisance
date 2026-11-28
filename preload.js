@@ -27,6 +27,13 @@ contextBridge.exposeInMainWorld('sampleApp', Object.freeze({
   openLink: key => ipcRenderer.invoke('sample:open-link', key),
   plan: request => ipcRenderer.invoke('sample:plan', request),
   setPaper: id => ipcRenderer.invoke('sample:paper:set', id),
+  // FIX: renderer.js calls window.sampleApp.tokens.* but the bridge was never exposed.
+  tokens: Object.freeze({
+    get: () => ipcRenderer.invoke('sample:tokens:get'),
+    add: input => ipcRenderer.invoke('sample:tokens:add', input),
+    remove: id => ipcRenderer.invoke('sample:tokens:remove', id),
+    select: id => ipcRenderer.invoke('sample:tokens:select', id)
+  }),
   signal: () => ipcRenderer.invoke('sample:signal'),
   recheckSource: id => ipcRenderer.invoke('sample:signal:recheck', id),
   sourceTrail: id => ipcRenderer.invoke('sample:signal:recent', id)
