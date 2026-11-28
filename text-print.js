@@ -49,7 +49,9 @@ function compose({time, date, terms, barcode = null, logo = null, profile}) {
   stream.add(initStream(profile));
   stream.fontB().align(1);
 
-  if (logo) for (const chunk of logo.chunks) stream.add(chunk);
+  if (logo) for (const chunk of logo.chunks || []) {
+    if (chunk.length >= 8 && chunk[0] === GS && chunk[1] === 0x76 && chunk[2] === 0x30) stream.add(chunk);
+  }
 
   stream.size(2, 2).line('Proof of Payment');
   stream.size(1, 1).line();
@@ -64,8 +66,29 @@ function compose({time, date, terms, barcode = null, logo = null, profile}) {
   if (barcode) stream.align(1).barcode(String(barcode));
   stream.feed(4);
   stream.add(cutStream(profile));
-  const chunks = stream.parts;
+  const chunks = pack(stream.parts);
   return {chunks, bytes: chunks.reduce((total, chunk) => total + chunk.length, 0)};
+}
+
+function isRaster(part) {
+  return part.length >= 8 && part[0] === GS && part[1] === 0x76 && part[2] === 0x30;
+}
+// Keep text together and raster blocks separate so a receipt stays under the helper's chunk cap.
+function pack(parts) {
+  const chunks = [];
+  const text = [];
+  const flush = () => {
+    if (!text.length) return;
+    const buf = Buffer.concat(text);
+    text.length = 0;
+    if (buf.length) chunks.push(buf);
+  };
+  for (const part of parts) {
+    if (isRaster(part)) { flush(); chunks.push(part); }
+    else text.push(part);
+  }
+  flush();
+  return chunks;
 }
 
 module.exports = {compose, wrap, COLS};

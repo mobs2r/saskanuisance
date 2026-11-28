@@ -1,16 +1,14 @@
 'use strict';
-// The print job must be the captured ticket raster. compose() inserts a 0-byte
-// line and a nested logo init/cut, which ReceiptPrint.exe rejects.
+// A real print is native printer text plus the logo raster, not a screenshot of the screen font.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const {spawnSync} = require('node:child_process');
+const {compose} = require('./text-print');
 const {rasterize} = require('./raster');
 const {profileFor} = require('./paper-profiles');
+const {validateChunks} = require('./receipt-chunks');
 const paper = profileFor('roll57');
-const HEADER = Buffer.from([0x1b, 0x40, 0x1b, 0x37, 0x07, 0x78, 0x02, 0x1b, 0x61, 0x00, 0x1b, 0x4a]);
-const TAIL = Buffer.from([0x1b, 0x4a, 0x58, 0x1d, 0x56, 0x42, 0x00]);
-const ROW_BYTES = 56;
 
 function wire(chunks) {
   const header = Buffer.alloc(8);
@@ -22,58 +20,55 @@ function wire(chunks) {
     return [size, chunk];
   })]);
 }
-
-function assertHelperFraming(raster, height) {
-  const chunks = raster.chunks;
-  assert.equal(raster.width, paper.width);
-  assert.equal(raster.height, height);
-  assert.equal(chunks.length, Math.ceil(height / 64) + 2);
-  assert.ok(chunks.length >= 3 && chunks.length <= 41, 'chunk count');
-  for (const chunk of chunks) assert.ok(chunk.length >= 1 && chunk.length <= 3784, 'chunk length ' + chunk.length);
-  assert.ok(chunks[0].length >= 13 && chunks[0].subarray(0, HEADER.length).equals(HEADER), 'receipt header');
-  const tail = chunks.at(-1);
-  assert.ok(tail.subarray(tail.length - TAIL.length).equals(TAIL), 'cut');
-  for (let i = 1; i < chunks.length - 1; i++) {
-    const chunk = chunks[i];
-    assert.equal(chunk[0], 0x1d);
-    assert.equal(chunk[1], 0x76);
-    assert.equal(chunk[2], 0x30);
-    assert.equal(chunk[3], 0);
-    assert.equal(chunk[4], ROW_BYTES);
-    assert.equal(chunk[5], 0);
-    const rows = chunk[6] + 256 * chunk[7];
-    assert.ok(rows >= 1 && rows <= 64);
-    assert.equal(chunk.length, 8 + ROW_BYTES * rows);
-  }
+function isRaster(chunk) {
+  return chunk.length >= 8 && chunk[0] === 0x1d && chunk[1] === 0x76 && chunk[2] === 0x30;
+}
+function dryRun(chunks) {
+  const helper = path.join(__dirname, 'ReceiptPrint.exe');
+  const run = spawnSync(helper, ['--dry-run'], {input: wire(chunks), windowsHide: true, encoding: 'utf8'});
+  if (run.status !== 0) { console.error(run.stdout); console.error(run.stderr); }
+  assert.equal(run.status, 0);
+  const parsed = JSON.parse(run.stdout);
+  assert.equal(parsed.printerOpened, false);
+  assert.equal(parsed.ok, true);
+  return parsed;
 }
 
-// Same bytes renderReceipt returns as preview.raster and handlePrint sends.
-for (const height of [628, 1200]) {
-  const pixels = Buffer.alloc(paper.width * height * 4, 255);
-  pixels[0] = pixels[1] = pixels[2] = 0;
-  const raster = rasterize(pixels, paper.width, height, paper);
-  assertHelperFraming(raster, height);
-  if (process.platform === 'win32') {
-    const helper = path.join(__dirname, 'ReceiptPrint.exe');
-    const dryRun = spawnSync(helper, ['--dry-run'], {input: wire(raster.chunks), windowsHide: true, encoding: 'utf8'});
-    if (dryRun.status !== 0) {
-      console.error(dryRun.stdout);
-      console.error(dryRun.stderr);
-    }
-    assert.equal(dryRun.status, 0, 'dry-run of the ' + height + '-row ticket raster');
-    const parsed = JSON.parse(dryRun.stdout);
-    assert.equal(parsed.printerOpened, false);
-    assert.equal(parsed.ok, true);
-    assert.equal(parsed.bytes, raster.bytes);
-  }
+const logo = rasterize(Buffer.alloc(paper.width * 64 * 4, 255), paper.width, 64, paper);
+const terms = [
+  'Proof of Payment permits transfers prior',
+  'to time noted above. Present at boarding/',
+  'on request. Retain to avoid fines/removal.'
+];
+const job = compose({time: '12:48 PM', date: 'SEP 10,2026', terms, barcode: null, logo, profile: paper});
+validateChunks(job.chunks);
+assert.ok(job.chunks.length <= 41);
+assert.ok(job.chunks.every(chunk => chunk.length >= 1 && chunk.length <= 3784));
+const rasterChunks = job.chunks.filter(isRaster);
+const textChunks = job.chunks.length - rasterChunks.length;
+assert.equal(rasterChunks.length, 1, 'a 64-row logo is one GS v 0 block');
+assert.ok(textChunks >= 1);
+assert.ok(Buffer.concat(job.chunks).includes(Buffer.from('Proof of Payment', 'ascii')));
+assert.ok(!job.chunks.some(chunk => chunk.length >= 8 && chunk[0] === 0x1b && chunk[1] === 0x40 && chunk !== job.chunks[0] && isRaster(chunk)));
+if (process.platform === 'win32') {
+  const parsed = dryRun(job.chunks);
+  assert.equal(parsed.bytes, job.bytes);
+  const plain = rasterize(Buffer.alloc(paper.width * 1200 * 4, 255), paper.width, 1200, paper);
+  validateChunks(plain.chunks);
+  dryRun(plain.chunks);
 }
 
 const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
 const handle = main.slice(main.indexOf('async function handlePrint'), main.indexOf('let liveFeedSet'));
-assert.match(handle, /sendRaster\(preview\.raster\)/);
-assert.doesNotMatch(handle, /compose\(/);
-assert.match(main, /function validateChunks\(chunks\)/);
-assert.match(main, /if \(mode !== 'Status'\) validateChunks\(raster && raster\.chunks\)/);
+assert.match(handle, /compose\(\{/);
+assert.match(handle, /logo: preview\.logoRaster/);
+assert.match(handle, /sendRaster\(raster\)/);
+assert.doesNotMatch(handle, /sendRaster\(preview\.raster\)/);
 assert.match(handle, /internetClock\.now\(\)/);
 assert.match(handle, /serviceHours\(\)/);
-console.log('PASS: handlePrint sends the captured ticket raster, and 628- and 1200-row payloads match the helper.' + (process.platform === 'win32' ? ' Dry run did not open a printer.' : ' Windows dry run skipped.'));
+const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+const renderer = fs.readFileSync(path.join(__dirname, 'renderer.js'), 'utf8');
+assert.match(html, /-webkit-font-smoothing:\s*none/);
+assert.doesNotMatch(renderer, /dateGlyphs/);
+assert.match(renderer, /showReceiptText\(dateNode, \(parts\.month \+ ' ' \+ parts\.day \+ ',' \+ parts\.year\)\.toUpperCase\(\)\)/);
+console.log('PAYLOAD text chunks ' + textChunks + ', raster chunks ' + rasterChunks.length + ', total ' + job.chunks.length + ', bytes ' + job.bytes + (process.platform === 'win32' ? '. Dry run did not open a printer.' : '. Windows dry run skipped.'));

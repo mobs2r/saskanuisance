@@ -20,13 +20,68 @@ public static class ReceiptPrint {
   [DllImport("winspool.drv", SetLastError=true)] static extern bool ClosePrinter(IntPtr handle);
   static string Escape(string text) { return text.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", " ").Replace("\n", " "); }
   static void Check(bool success, string step) { if (!success) throw new Win32Exception(Marshal.GetLastWin32Error(), step); }
-  static bool Match(byte[] bytes, int start, byte[] pattern) {
-    if (start < 0 || start + pattern.Length > bytes.Length) return false;
-    for (int i = 0; i < pattern.Length; i++) if (bytes[start + i] != pattern[i]) return false;
-    return true;
+  static void Need(int at, int n, int length) { if (at + n > length) throw new InvalidDataException("Invalid receipt command."); }
+  static void Validate(List<byte[]> chunks) {
+    int total = 0;
+    foreach (byte[] chunk in chunks) total += chunk.Length;
+    byte[] all = new byte[total];
+    int offset = 0;
+    foreach (byte[] chunk in chunks) { System.Buffer.BlockCopy(chunk, 0, all, offset, chunk.Length); offset += chunk.Length; }
+    if (all.Length < 2 || all[0] != 0x1b || all[1] != 0x40) throw new InvalidDataException("Invalid receipt header.");
+    int p = 0;
+    bool cut = false;
+    while (p < all.Length) {
+      byte b = all[p];
+      if (b == 0x0a) { p++; continue; }
+      if (b >= 0x20 && b <= 0x7e) { p++; continue; }
+      if (b == 0x1b) {
+        Need(p, 2, all.Length);
+        byte cmd = all[p + 1];
+        if (cmd == 0x40) { p += 2; continue; }
+        if (cmd == 0x61 || cmd == 0x21 || cmd == 0x45 || cmd == 0x4a || cmd == 0x4d || cmd == 0x64) {
+          Need(p, 3, all.Length);
+          byte n = all[p + 2];
+          if ((cmd == 0x61 && n > 2) || (cmd == 0x45 && n > 1) || (cmd == 0x4d && n > 1)) throw new InvalidDataException("Invalid receipt command.");
+          p += 3; continue;
+        }
+        if (cmd == 0x37) { Need(p, 5, all.Length); p += 5; continue; }
+        throw new InvalidDataException("Invalid receipt command.");
+      }
+      if (b == 0x1d) {
+        Need(p, 2, all.Length);
+        byte cmd = all[p + 1];
+        if (cmd == 0x21 || cmd == 0x48 || cmd == 0x68 || cmd == 0x77) { Need(p, 3, all.Length); p += 3; continue; }
+        if (cmd == 0x56) {
+          Need(p, 3, all.Length);
+          byte m = all[p + 2];
+          if (m == 0 || m == 1 || m == 48 || m == 49) { cut = true; p += 3; continue; }
+          if (m == 65 || m == 66) { Need(p, 4, all.Length); cut = true; p += 4; continue; }
+          throw new InvalidDataException("Invalid receipt command.");
+        }
+        if (cmd == 0x76) {
+          Need(p, 8, all.Length);
+          if (all[p + 2] != 0x30 || all[p + 3] != 0) throw new InvalidDataException("Invalid raster header.");
+          int x = all[p + 4] + all[p + 5] * 256;
+          int y = all[p + 6] + all[p + 7] * 256;
+          if (x != RowBytes || y < 1 || y > 64) throw new InvalidDataException("Invalid raster block.");
+          int data = x * y;
+          Need(p, 8 + data, all.Length);
+          p += 8 + data; continue;
+        }
+        if (cmd == 0x6b) {
+          Need(p, 4, all.Length);
+          if (all[p + 2] != 73) throw new InvalidDataException("Invalid receipt command.");
+          int len = all[p + 3];
+          if (len < 2) throw new InvalidDataException("Invalid receipt command.");
+          Need(p, 4 + len, all.Length);
+          p += 4 + len; continue;
+        }
+        throw new InvalidDataException("Invalid receipt command.");
+      }
+      throw new InvalidDataException("Invalid receipt command.");
+    }
+    if (!cut) throw new InvalidDataException("Receipt is missing its cut.");
   }
-  static readonly byte[] Header = { 0x1b, 0x40, 0x1b, 0x37, 0x07, 0x78, 0x02, 0x1b, 0x61, 0x00, 0x1b, 0x4a };
-  static readonly byte[] Tail = { 0x1b, 0x4a, 0x58, 0x1d, 0x56, 0x42, 0x00 };
   [DllImport("cfgmgr32.dll", EntryPoint="CM_Locate_DevNodeW", CharSet=CharSet.Unicode)] static extern uint LocateNode(out uint node, string instance, uint flags);
   [DllImport("cfgmgr32.dll")] static extern uint CM_Get_DevNode_Status(out uint status, out uint problem, uint node, uint flags);
   static int ConnectionStatus() {
@@ -49,7 +104,7 @@ public static class ReceiptPrint {
       using(var reader = new BinaryReader(Console.OpenStandardInput())) {
         if(reader.ReadUInt32() != 0x31504D53) throw new InvalidDataException("Invalid sample payload.");
         uint count = reader.ReadUInt32();
-        if(count < 3 || count > 41) throw new InvalidDataException("Invalid chunk count.");
+        if(count < 1 || count > 41) throw new InvalidDataException("Invalid chunk count.");
         for(uint i=0;i<count;i++) {
           uint length = reader.ReadUInt32();
           if(length < 1 || length > 3784) throw new InvalidDataException("Invalid block length.");
@@ -59,17 +114,7 @@ public static class ReceiptPrint {
         }
         if(reader.BaseStream.ReadByte()!=-1) throw new InvalidDataException("Unexpected trailing data.");
       }
-      // header: ESC @ ESC 7 <heat> ESC a 0 ESC J <top margin>
-      if(chunks[0].Length < 13 || !Match(chunks[0], 0, Header)) throw new InvalidDataException("Invalid receipt header.");
-      // tail: ESC J <feed> GS V B 0
-      byte[] tail = chunks[chunks.Count - 1];
-      if(!Match(tail, tail.Length - Tail.Length, Tail)) throw new InvalidDataException("Receipt is missing its cut.");
-      for(int i=1;i<chunks.Count-1;i++) {
-        byte[] c=chunks[i];
-        if(c.Length<8 || c[0]!=0x1d || c[1]!=0x76 || c[2]!=0x30 || c[3]!=0 || c[4]!=RowBytes || c[5]!=0) throw new InvalidDataException("Invalid raster header.");
-        int rows=c[6]+256*c[7];
-        if(rows<1 || rows>64 || c.Length!=8+RowBytes*rows) throw new InvalidDataException("Invalid raster block.");
-      }
+      Validate(chunks);
       if(args[0]=="--dry-run") {
         Console.WriteLine("{\"ok\":true,\"dryRun\":true,\"printerOpened\":false,\"chunks\":"+chunks.Count+",\"bytes\":"+total+"}");
         return 0;

@@ -1,7 +1,7 @@
 {
   "name": "sample-receipt",
   "productName": "Saskanuisance",
-  "version": "1.8.5",
+  "version": "1.8.6",
   "description": "Local receipt sample, official Saskatoon transit and ECCC weather.",
   "main": "main.js",
   "private": true,
