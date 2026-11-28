@@ -25,6 +25,13 @@ async function savePaper(id) {
   selectedPaper=id; return {selected:selectedPaper,profiles:[PROFILE]};
 }
 const internetClock = new InternetClock();
+// FIX: self-scheduling sync that backs off while the clock has no anchor.
+let syncTimer = null;
+function scheduleSync() {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(async () => { await internetClock.sync(); scheduleSync(); }, internetClock.retryDelayMs());
+  if (syncTimer.unref) syncTimer.unref();
+}
 const receiptFormat = new Intl.DateTimeFormat('en-US', {timeZone:'America/Regina',year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
 let transitProvider=null, weatherProvider=null, cityInfoProvider=null, cityMapProvider=null, saskPowerProvider=null, cityPowerProvider=null;
 const trustedNow=()=>{try{return internetClock.now();}catch{return null;}};
@@ -41,7 +48,8 @@ function cityInfoData(){if(!cityInfoProvider){const {CityInfoProvider}=require('
 function cityMapData(){if(!cityMapProvider){const {CityMapProvider}=require('./city-map-provider');cityMapProvider=new CityMapProvider();cityMapProvider.start();}return cityMapProvider;}
 function powerOutageData(){if(!saskPowerProvider){const {SaskPowerProvider}=require('./saskpower-provider');saskPowerProvider=new SaskPowerProvider();saskPowerProvider.start();}return saskPowerProvider;}
 function cityPowerData(){if(!cityPowerProvider){const {CityPowerProvider}=require('./city-power-provider');cityPowerProvider=new CityPowerProvider();}return cityPowerProvider;}
-app.on('before-quit',()=>{bus.stopAll();transitProvider?.stop();weatherProvider?.stop();cityInfoProvider?.stop();cityMapProvider?.stop();saskPowerProvider?.stop();cityPowerProvider?.stop();announcements.stop();});
+// FIX: clear the sync timer on quit.
+app.on('before-quit',()=>{if(syncTimer)clearTimeout(syncTimer);bus.stopAll();transitProvider?.stop();weatherProvider?.stop();cityInfoProvider?.stop();cityMapProvider?.stop();saskPowerProvider?.stop();cityPowerProvider?.stop();announcements.stop();});
 const REMOTE_IMAGES=Object.freeze([
   /^https:\/\/tile\.openstreetmap\.org\/\d{1,2}\/\d+\/\d+\.png$/,
   /^https:\/\/[abc]\.tile\.opentopomap\.org\/\d{1,2}\/\d+\/\d+\.png$/,
@@ -154,18 +162,22 @@ async function renderReceipt(now = internetClock.now(), paperId = selectedPaper)
       const foot = document.querySelector('.terms').getBoundingClientRect();
       const rect = ticket.getBoundingClientRect();
       return {paper: ${JSON.stringify(paper.id)}, overflow: getComputedStyle(document.documentElement).overflow, bodyWidth: document.body.getBoundingClientRect().width, height: rect.height, width: rect.width, footerTop: foot.top, footerBottom: foot.bottom, ticketBottom: rect.bottom,
-        time: document.querySelector('#expiry-time').dateTime, timeText: document.querySelector('#expiry-time svg').getAttribute('aria-label'), dateText: document.querySelector('#expiry-date svg').getAttribute('aria-label'),
+        // FIX: optional chaining so a placeholder render cannot throw a raw TypeError.
+        time: document.querySelector('#expiry-time').dateTime, timeText: document.querySelector('#expiry-time svg')?.getAttribute('aria-label') ?? null, dateText: document.querySelector('#expiry-date svg')?.getAttribute('aria-label') ?? null,
         footer: document.querySelector('.terms').textContent, logoTransform: getComputedStyle(document.querySelector('.logo')).transform,
         trim: getComputedStyle(ticket, '::after').borderLeftStyle, trimDisplay: getComputedStyle(ticket,'::after').display,
         logoWidth: document.querySelector('.logo').getBoundingClientRect().width,
         fontSizes: ['.heading','.valid-label','.terms'].map(selector=>getComputedStyle(document.querySelector(selector)).fontSize),
-        contentBounds: ['.heading','.valid-label','#expiry-time svg','#expiry-date svg','.logo'].map(selector=>{const el=document.querySelector(selector);let r;if(el.tagName==='H2'||el.tagName==='P'){const range=document.createRange();range.selectNodeContents(el);r=range.getBoundingClientRect();}else{r=el.getBoundingClientRect();}return {selector,left:r.left,right:r.right,top:r.top};}),
+        // FIX: missing nodes collapse to a zero-width box instead of dereferencing null.
+        contentBounds: ['.heading','.valid-label','#expiry-time svg','#expiry-date svg','.logo'].map(selector=>{const el=document.querySelector(selector);if(!el)return {selector,left:0,right:0,top:0};let r;if(el.tagName==='H2'||el.tagName==='P'){const range=document.createRange();range.selectNodeContents(el);r=range.getBoundingClientRect();}else{r=el.getBoundingClientRect();}return {selector,left:r.left,right:r.right,top:r.top};}),
         trimX: rect.right,
         footerLines: Array.from(document.querySelectorAll('.terms-line')).map(node => { const range = document.createRange(); range.selectNodeContents(node); const r = range.getBoundingClientRect(); return {text: node.textContent, left: r.left, right: r.right, top: r.top, bottom: r.bottom}; })};
     })()`);
     if (details.trimDisplay !== 'none') throw new Error('Trim guide failed validation. Printing stopped.');
     if (details.footerTop < 0 || details.footerBottom > details.ticketBottom + 1) throw new Error('Footer does not fit the ticket. Printing stopped.');
     if (!details.footer.includes('permits transfers prior') || details.footerLines.length !== 3 || details.footerLines.some(line => line.left < 0 || line.right >= details.trimX)) throw new Error('Footer failed validation. Printing stopped.');
+    // FIX: explicit message when the clock had no value to stamp.
+    if (!details.timeText || !details.dateText) throw new Error('The receipt has no internet time. Wait for the clock indicator, then try again.');
     if(details.contentBounds.some(item=>item.left < -.05 || item.right > details.trimX + .05)) throw new Error('Original-size content does not fit this paper layout. Printing stopped instead of shrinking or clipping.');
     const height = Math.ceil(details.height * ZOOM);
     if (height < 500 || height > 1600) throw new Error('Unexpected receipt size. Printing stopped.');
@@ -227,10 +239,10 @@ function liveFeeds(){if(!liveFeedSet){const {ViaLive,Scooters}=require('./live-f
 async function start() {
   await loadPaper();
   tokens.init(app.getPath('userData'));
-  internetClock.sync();
-  const syncTimer=setInterval(()=>internetClock.sync(),60000); syncTimer.unref();
+  // FIX: initial sync then self-scheduling retries; resume reschedules too.
+  internetClock.sync().finally(scheduleSync);
   powerMonitor.on('suspend',()=>internetClock.invalidate('Computer was suspended; internet time needs resync.'));
-  powerMonitor.on('resume',()=>{internetClock.invalidate('Resyncing after wake.'); internetClock.sync().then(()=>{if(internetClock.snapshot().status!=='synced')internetClock.sync();});});
+  powerMonitor.on('resume',()=>{internetClock.invalidate('Resyncing after wake.'); internetClock.sync().finally(scheduleSync);});
   session.defaultSession.webRequest.onBeforeRequest({urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*']}, (details, callback) => callback({cancel: !(!selfTestDir && details.resourceType==='image' && REMOTE_IMAGES.some(pattern=>pattern.test(details.url)))}));
   session.defaultSession.webRequest.onBeforeSendHeaders({urls:['https://tile.openstreetmap.org/*','https://*.tile.openstreetmap.fr/*','https://*.tile-cyclosm.openstreetmap.fr/*','https://*.tile.opentopomap.org/*']},(details,callback)=>callback({requestHeaders:{...details.requestHeaders,'User-Agent':'IllicitSampleReceipt/1.6 (+https://illicit.page; contact: biz@illicit.page)'}}));
   window = new BrowserWindow({title: 'Saskanuisance', icon: path.join(__dirname, 'icon.ico'), width: 1280, height: 860, minWidth: 1000, minHeight: 760, show: !selfTestDir, autoHideMenuBar: true, backgroundColor: '#ffffee', webPreferences: {preload: path.join(__dirname, 'preload.js'), offscreen: Boolean(selfTestDir), backgroundThrottling: false, contextIsolation: true, nodeIntegration: false, sandbox: true}});
@@ -293,8 +305,13 @@ async function selfTest() {
   assert.equal(PRINT_CONFIRM.cancelId, 1);
   assert.equal(PRINT_CONFIRM.defaultId, 1);
   assert.equal(PRINT_CONFIRM.detail, undefined);
-  await internetClock.sync();
-  assert.equal(internetClock.snapshot().status, 'synced', 'Live HTTPS internet time must synchronize.');
+  // FIX: the sync assert was network-dependent; retry before declaring failure.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await internetClock.sync();
+    if (internetClock.snapshot().status === 'synced') break;
+    await delay(1500);
+  }
+  assert.equal(internetClock.snapshot().status, 'synced', 'Live HTTPS internet time must synchronize: ' + (internetClock.snapshot().error || 'no detail'));
   const now = internetClock.now();
   const receipt = await renderReceipt(now);
   assert.ok(Math.abs((Date.parse(receipt.details.time) - now) - 90 * 60000) < 1, 'Expiry must be internet time plus 90 minutes, within Date millisecond precision.');
