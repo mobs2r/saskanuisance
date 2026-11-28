@@ -2,6 +2,8 @@
 const assert = require('node:assert/strict');
 const {compose, wrap, COLS} = require('./text-print');
 const {PROFILE} = require('./paper-profiles');
+const {validateChunks} = require('./receipt-chunks');
+const {rasterize} = require('./raster');
 
 const ESC = 0x1b, GS = 0x1d;
 const sample = {
@@ -41,8 +43,15 @@ assert.equal(withBarcode[gsK + 3], 10, 'barcode length must be selector plus eig
 assert.deepEqual([...withBarcode.subarray(gsK + 4, gsK + 6)], [0x7b, 0x43], 'barcode must select code set C.');
 
 // --- logo splice --------------------------------------------------------
-const logo = {chunks: [Buffer.from([GS, 0x76, 0x30, 0])]};
-assert.ok(Buffer.concat(compose({...sample, logo}).chunks).includes(Buffer.from([GS, 0x76, 0x30, 0])), 'logo chunks must be spliced in.');
+const logoRow = Buffer.alloc(8 + 56);
+logoRow[0] = GS; logoRow[1] = 0x76; logoRow[2] = 0x30; logoRow[4] = 56; logoRow[6] = 1;
+const withLogo = compose({...sample, logo: {chunks: [Buffer.from([0x1b, 0x40]), logoRow, Buffer.from([0x1d, 0x56, 0x42, 0])]}});
+assert.ok(withLogo.chunks.some(chunk => chunk.equals(logoRow)), 'only the logo raster block is spliced in, not its init or cut.');
+validateChunks(composed.chunks);
+validateChunks(withLogo.chunks);
+validateChunks(compose({...sample, barcode: '11332648'}).chunks);
+const tiny = rasterize(Buffer.alloc(PROFILE.width * 8 * 4, 255), PROFILE.width, 8, PROFILE);
+validateChunks(tiny.chunks);
 
 // --- rejections ---------------------------------------------------------
 assert.throws(() => compose({time: '1:00 PM', date: 'X'}), /paper profile/, 'missing profile must throw.');
