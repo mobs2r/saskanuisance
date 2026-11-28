@@ -56,6 +56,7 @@ const REMOTE_IMAGES=Object.freeze([
   /^https:\/\/[abc]\.tile\.openstreetmap\.fr\/hot\/\d{1,2}\/\d+\/\d+\.png$/,
   /^https:\/\/[abc]\.tile-cyclosm\.openstreetmap\.fr\/cyclosm\/\d{1,2}\/\d+\/\d+\.png$/,
   /^https:\/\/tile\.memomaps\.de\/tilegen\/\d{1,2}\/\d+\/\d+\.png$/,
+  /^https:\/\/basemaps\.cartocdn\.com\/(?:dark_all|light_all)\/\d{1,2}\/\d+\/\d+\.png$/,
   /^https:\/\/tiles\.maps\.eox\.at\/wmts\/1\.0\.0\/s2cloudless_3857\/default\/g\/\d{1,2}\/\d+\/\d+\.jpg$/,
   /^https:\/\/hotline\.gov\.sk\.ca\/map\/Cctv\/(?:10|13|14|16|17|30|36|49|50|53|56|57)(?:\?v=\d{10,13})?$/,
   /^https:\/\/www\.wagondriver\.com\/USBCamera\.jpg(?:\?v=\d{10,13})?$/,
@@ -147,6 +148,7 @@ async function captureHidden(win, rectangle) {
 }
 async function renderReceipt(now = internetClock.now(), paperId = selectedPaper) {
   const paper = profileFor(paperId);
+  // Offscreen receipt capture does not paint while a hidden window is throttled. The visible window keeps the default.
   const renderer = new BrowserWindow({show: false, width: paper.width, height: 1000, useContentSize: true, backgroundColor: '#ffffff', webPreferences: {nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false, offscreen: true}});
   secureWindow(renderer);
   try {
@@ -244,8 +246,9 @@ async function start() {
   powerMonitor.on('suspend',()=>internetClock.invalidate('Computer was suspended; internet time needs resync.'));
   powerMonitor.on('resume',()=>{internetClock.invalidate('Resyncing after wake.'); internetClock.sync().finally(scheduleSync);});
   session.defaultSession.webRequest.onBeforeRequest({urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*']}, (details, callback) => callback({cancel: !(!selfTestDir && details.resourceType==='image' && REMOTE_IMAGES.some(pattern=>pattern.test(details.url)))}));
-  session.defaultSession.webRequest.onBeforeSendHeaders({urls:['https://tile.openstreetmap.org/*','https://*.tile.openstreetmap.fr/*','https://*.tile-cyclosm.openstreetmap.fr/*','https://*.tile.opentopomap.org/*']},(details,callback)=>callback({requestHeaders:{...details.requestHeaders,'User-Agent':'IllicitSampleReceipt/1.6 (+https://illicit.page; contact: biz@illicit.page)'}}));
-  window = new BrowserWindow({title: 'Saskanuisance', icon: path.join(__dirname, 'icon.ico'), width: 1280, height: 860, minWidth: 1000, minHeight: 760, show: !selfTestDir, autoHideMenuBar: true, backgroundColor: '#ffffee', webPreferences: {preload: path.join(__dirname, 'preload.js'), offscreen: Boolean(selfTestDir), backgroundThrottling: false, contextIsolation: true, nodeIntegration: false, sandbox: true}});
+  session.defaultSession.webRequest.onBeforeSendHeaders({urls:['https://tile.openstreetmap.org/*','https://*.tile.openstreetmap.fr/*','https://*.tile-cyclosm.openstreetmap.fr/*','https://*.tile.opentopomap.org/*','https://basemaps.cartocdn.com/*']},(details,callback)=>callback({requestHeaders:{...details.requestHeaders,'User-Agent':'IllicitSampleReceipt/1.6 (+https://illicit.page; contact: biz@illicit.page)'}}));
+  const captureOffscreen = Boolean(selfTestDir);
+  window = new BrowserWindow({title: 'Saskanuisance', icon: path.join(__dirname, 'icon.ico'), width: 1280, height: 860, minWidth: 1000, minHeight: 760, show: !selfTestDir, autoHideMenuBar: true, backgroundColor: '#ffffee', webPreferences: {preload: path.join(__dirname, 'preload.js'), offscreen: captureOffscreen, ...(captureOffscreen ? {backgroundThrottling: false} : {}), contextIsolation: true, nodeIntegration: false, sandbox: true}});
   secureWindow(window);
   ipcMain.handle('sample:open-link', async (event,key) => {
     if(!isTrusted(event)) throw new Error('Untrusted request.');
