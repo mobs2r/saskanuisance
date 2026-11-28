@@ -205,8 +205,8 @@
  const mapWrap=document.querySelector('.map-wrap');
  const BASEMAPS=[
   ['street','Street',L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© <a href="#" data-link="osmCopyright">OpenStreetMap contributors</a>'})],
-  ['light','Paper',L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,className:'tiles-paper',attribution:'© <a href="#" data-link="osmCopyright">OpenStreetMap contributors</a>'})],
-  ['dark','Night',L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,className:'tiles-night',attribution:'© <a href="#" data-link="osmCopyright">OpenStreetMap contributors</a>'})],
+  ['light','Paper',L.tileLayer('https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© <a href="#" data-link="osmCopyright">OpenStreetMap contributors</a> © CARTO'})],
+  ['dark','Night',L.tileLayer('https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© <a href="#" data-link="osmCopyright">OpenStreetMap contributors</a> © CARTO'})],
   ['transit','Transit',L.tileLayer('https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png',{maxZoom:18,attribution:'© <a href="#" data-link="osmCopyright">OpenStreetMap contributors</a> · ÖPNVKarte'})],
   ['cycle','Cycling',L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',{subdomains:'abc',maxZoom:19,attribution:'© <a href="#" data-link="osmCopyright">OpenStreetMap contributors</a> · CyclOSM'})],
   ['topo','Terrain',L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{subdomains:'abc',maxZoom:17,attribution:'© <a href="#" data-link="osmCopyright">OpenStreetMap contributors</a>, SRTM · OpenTopoMap (CC-BY-SA)'})],
@@ -224,6 +224,10 @@
   for(const input of document.querySelectorAll('input[name="basemap"]'))input.checked=input.value===entry[0];
  }
  for(const[,,layer]of BASEMAPS){layer.on('tileerror',()=>{if(layer===basemap&&++tileFailures>6&&mapNotice){mapNotice.textContent='Map images can’t load right now.';mapNotice.hidden=false;}});const clear=()=>{if(layer===basemap&&mapNotice&&/^(Loading map|Map images can)/.test(mapNotice.textContent)){mapNotice.hidden=true;tileFailures=0;}};layer.on('tileload',clear);layer.on('load',clear);}
+ const tonePane=map.createPane('tone');tonePane.style.zIndex='250';tonePane.style.pointerEvents='none';
+ const toneShade=document.createElement('div');toneShade.className='map-tone-shade';tonePane.appendChild(toneShade);
+ function placeTone(){const size=map.getSize(),origin=map.containerPointToLayerPoint([0,0]);toneShade.style.width=size.x+'px';toneShade.style.height=size.y+'px';toneShade.style.transform='translate3d('+origin.x+'px,'+origin.y+'px,0)';}
+ map.on('move zoom resize',placeTone);placeTone();
 
  const markerFor=new Map();
  const iconCache=new Map();
