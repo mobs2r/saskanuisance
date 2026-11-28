@@ -70,6 +70,8 @@ const ZOOM = 203.2 / 96;
 const htmlPath = path.join(__dirname, 'index.html');
 const selfTestArg = process.argv.find(value => value.startsWith('--self-test='));
 const selfTestDir = selfTestArg ? path.resolve(selfTestArg.slice('--self-test='.length)) : null;
+const receiptFitArg = process.argv.find(value => value.startsWith('--receipt-fit='));
+const receiptFitDir = receiptFitArg ? path.resolve(receiptFitArg.slice('--receipt-fit='.length)) : null;
 let window = null;
 let busy = false;
 let printHelperCalls = 0;
@@ -299,6 +301,30 @@ async function start() {
     return result;
   });
   await window.loadFile(htmlPath);
+  if (receiptFitDir) {
+    await fs.mkdir(receiptFitDir, {recursive: true});
+    try {
+      const receipt = await renderReceipt(Date.parse('2026-03-08T23:15:00Z'));
+      const header = Buffer.alloc(8);
+      header.writeUInt32LE(0x31504d53, 0);
+      header.writeUInt32LE(receipt.raster.chunks.length, 4);
+      const parts = [header];
+      for (const chunk of receipt.raster.chunks) {
+        const length = Buffer.alloc(4);
+        length.writeUInt32LE(chunk.length);
+        parts.push(length, chunk);
+      }
+      await fs.writeFile(path.join(receiptFitDir, 'payload.bin'), Buffer.concat(parts));
+      const info = {ok: true, width: receipt.raster.width, height: receipt.raster.height, chunks: receipt.raster.chunks.length, bytes: receipt.raster.bytes, chunkLengths: receipt.raster.chunks.map(chunk => chunk.length), dateText: receipt.details.dateText, timeText: receipt.details.timeText, ticketWidth: receipt.details.width, ticketHeight: receipt.details.height};
+      if (process.platform === 'win32') info.dryRun = await sendRaster(receipt.raster, 'DryRun');
+      await fs.writeFile(path.join(receiptFitDir, 'fit.json'), JSON.stringify(info));
+      app.exit(0);
+    } catch (error) {
+      await fs.writeFile(path.join(receiptFitDir, 'fit.json'), JSON.stringify({ok: false, message: error.message}));
+      app.exit(1);
+    }
+    return;
+  }
   if (selfTestDir) await selfTest();
 }
 async function selfTest() {

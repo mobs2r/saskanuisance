@@ -86,7 +86,7 @@ const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const renderer = fs.readFileSync(path.join(__dirname, 'renderer.js'), 'utf8');
 assert.match(html, /image-rendering:\s*pixelated/);
 assert.match(renderer, /imageSmoothingEnabled = false/);
-assert.match(renderer, /paintBitmap\(dateNode, parts\.month \+ ' ' \+ parts\.day \+ ',' \+ parts\.year, 2, 1\)/);
+assert.match(renderer, /paintBitmap\(dateNode, \(parts\.month \+ ' ' \+ parts\.day \+ ',' \+ parts\.year\)\.toUpperCase\(\), 2, 1\)/);
 assert.doesNotMatch(renderer, /dateGlyphs/);
 assert.doesNotMatch(fs.readFileSync(path.join(__dirname, 'city-guide.js'), 'utf8'), /make\('b','','YXE'\)/);
 console.log('PAYLOAD raster chunks ' + rasterChunks.length + ', total ' + job.chunks.length + ', bytes ' + job.bytes + (process.platform === 'win32' ? '. Dry run did not open a printer.' : '. Windows dry run skipped.'));
