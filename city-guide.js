@@ -344,9 +344,17 @@
   return g;
  }
 
- const cams=(Array.isArray(D.cams)?D.cams:[]).filter(c=>typeof c.url==='string'&&Number.isFinite(c.la));
- const camUrl=(cam,ms)=>cam.url+(cam.url.includes('?')?'&':'?')+'v='+ms;
- const every=s=>s>=3600?'every '+Math.round(s/3600)+' h':s>=120?'every '+Math.round(s/60)+' min':'every minute';
+ const Cam=window.YXE_CAMERAS||{sourcesOf:c=>typeof c.url==='string'?[c.url]:[],pickFreshest:()=>null,camIsStale:()=>false};
+ const feedOf=c=>{const urls=Cam.sourcesOf(c);return urls.length&&Number.isFinite(c.la)?{...c,url:urls[0],urls,every:Number(c.every)||60,group:c.group||'metro'}:null;};
+ const metroFeeds=(Array.isArray(D.cams)?D.cams:[]).map(feedOf).filter(Boolean);
+ const skFeeds=(Array.isArray(window.YXE_HOTLINE_SK)?window.YXE_HOTLINE_SK:[]).map(feedOf).filter(Boolean);
+ let camGroup='metro',camHealth={},camStamp='',camWatchKey='';
+ const listedCams=()=>{const o=origin(),pool=camGroup==='sk'?skFeeds:camGroup==='near'?[...metroFeeds,...skFeeds].filter(c=>meters(o.lat,o.lon,c.la,c.lo)<=80000):metroFeeds;return pool.slice().sort((a,b)=>(isStale(a)-isStale(b))||meters(o.lat,o.lon,a.la,a.lo)-meters(o.lat,o.lon,b.la,b.lo));};
+ const isStale=cam=>Cam.camIsStale(cam,camHealth);
+ const healthyCams=()=>listedCams().filter(c=>!isStale(c));
+ const camSrc=(url,ms)=>url+(url.includes('?')?'&':'?')+'v='+ms;
+ const every=s=>s>=3600?'every '+Math.round(s/3600)+' h':s>=120?'every '+Math.round(s/60)+' min':s>=60?'every minute':'every '+s+' s';
+ const camLabel=cam=>cam.src+' · '+every(cam.every||60)+(cam.urls.length>1?' · '+cam.urls.length+' views':'')+(isStale(cam)?' · stale':'');
  const tv=make('section','tv'),tvBar=make('header','tv-bar'),tvTitle=make('b','tv-title'),tvSrc=make('span','tv-src'),tvPrev=button('◀','tv-btn','Previous camera'),tvNext=button('▶','tv-btn','Next camera'),tvClose=button('×','tv-btn','Close');
  const tvScreen=make('div','tv-screen'),tvImg=make('img','tv-img'),tvStatic=make('div','tv-static'),tvMsg=make('span','tv-msg');
  const tvCtl=make('footer','tv-ctl'),tvPlay=button('❚❚','tv-btn','Pause'),tvRefresh=button('⟳','tv-btn','Refresh now'),tvFull=button('⛶','tv-btn','Full screen'),tvLive=make('span','tv-live'),tvTime=make('span','tv-time mono');
@@ -357,29 +365,31 @@
  const player={cam:null,playing:true,timer:0,ticker:0,loaded:0,token:0,state:'idle'};
  function tvState(state,message){player.state=state;tv.dataset.state=state;tvMsg.textContent=message||'';tvStatic.hidden=state==='ok';tvLive.textContent=state==='error'?'NO SIGNAL':player.playing?'● LIVE':'❚❚ PAUSED';}
  function tvTick(){if(!player.cam)return;if(!player.loaded){tvTime.textContent='';return;}const age=Math.max(0,Math.round((Date.now()-player.loaded)/1000));tvTime.textContent=clock(player.loaded)+' · '+(age<60?age+' s ago':Math.round(age/60)+' min ago');}
- function tvSchedule(){clearTimeout(player.timer);if(player.playing&&player.cam&&!tv.hidden)player.timer=setTimeout(tvLoad,Math.max(30,player.cam.every||60)*1000);}
+ function chosenUrl(cam){const best=Cam.pickFreshest(cam.urls.map(url=>({url,...(camHealth[url]||{})})));if(best)return best.url;const pool=cam.urls.filter(url=>!camHealth[url]?.stale);const urls=pool.length?pool:cam.urls;player.flip=(player.flip||0)+1;return urls[player.flip%urls.length];}
+ function tvSchedule(){clearTimeout(player.timer);if(document.hidden||!player.playing||!player.cam||tv.hidden)return;player.timer=setTimeout(tvLoad,Math.max(15,player.cam.every||60)*1000);}
  function tvLoad(){
-  const cam=player.cam;if(!cam)return;const token=++player.token,probe=new Image(),ms=Date.now();let done=false;
+  const cam=player.cam;if(!cam||document.hidden||tv.hidden)return;if(isStale(cam)){tv.dataset.busy='false';tvState('error','NO SIGNAL');tvSrc.textContent=camLabel(cam);return;}
+  const token=++player.token,probe=new Image(),ms=Date.now();let done=false;
   if(player.state!=='ok')tvState('loading','TUNING…');else tv.dataset.busy='true';
   const fail=()=>{if(done||token!==player.token)return;done=true;tv.dataset.busy='false';tvState('error','NO SIGNAL · camera is offline or not responding');tvSchedule();};
   const guard=setTimeout(fail,20000);
   probe.onload=()=>{if(done||token!==player.token)return;done=true;clearTimeout(guard);tv.dataset.busy='false';if(!probe.naturalWidth){fail();return;}tvImg.src=probe.src;tvImg.alt=cam.n;player.loaded=ms;tvState('ok');tvTick();tvSchedule();};
   probe.onerror=()=>{clearTimeout(guard);fail();};
-  probe.src=camUrl(cam,ms);
+  probe.src=camSrc(chosenUrl(cam),ms);
  }
  function openCam(cam){
-  if(!cam)return;player.cam=cam;player.loaded=0;player.playing=true;tvImg.removeAttribute('src');tvTitle.textContent=cam.n;tvSrc.textContent=cam.src+' · '+every(cam.every||60);tvPlay.textContent='❚❚';tvPlay.title='Pause';tv.hidden=false;tvState('loading','TUNING…');tvLoad();clearInterval(player.ticker);player.ticker=setInterval(tvTick,1000);
+  if(!cam)return;player.cam=cam;player.loaded=0;player.playing=true;tvImg.removeAttribute('src');tvTitle.textContent=cam.n;tvSrc.textContent=camLabel(cam);tvPlay.textContent='❚❚';tvPlay.title='Pause';tv.hidden=false;tvState('loading','TUNING…');tvLoad();clearInterval(player.ticker);player.ticker=setInterval(tvTick,1000);syncCameraWatch();
   for(const row of document.querySelectorAll('.cam-row'))row.setAttribute('aria-current',String(row.dataset.cam===cam.id));
  }
- function closeCam(){clearTimeout(player.timer);clearInterval(player.ticker);player.token++;player.cam=null;tv.hidden=true;tv.classList.remove('tv-max');if(document.fullscreenElement===tv)document.exitFullscreen().catch(()=>{});for(const row of document.querySelectorAll('.cam-row'))row.setAttribute('aria-current','false');}
- const stepCam=d=>{const i=cams.indexOf(player.cam);openCam(cams[(i+d+cams.length)%cams.length]);};
+ function closeCam(){clearTimeout(player.timer);clearInterval(player.ticker);player.token++;player.cam=null;tv.hidden=true;tv.classList.remove('tv-max');if(document.fullscreenElement===tv)document.exitFullscreen().catch(()=>{});for(const row of document.querySelectorAll('.cam-row'))row.setAttribute('aria-current','false');syncCameraWatch();}
+ const stepCam=d=>{const list=healthyCams();if(!list.length)return;let i=list.findIndex(c=>c.id===player.cam?.id);if(i<0)i=d>0?-1:0;openCam(list[(i+d+list.length)%list.length]);};
  tvPrev.addEventListener('click',()=>stepCam(-1));tvNext.addEventListener('click',()=>stepCam(1));tvClose.addEventListener('click',closeCam);
  tvPlay.addEventListener('click',()=>{player.playing=!player.playing;tvPlay.textContent=player.playing?'❚❚':'▶';tvPlay.title=player.playing?'Pause':'Play';if(player.playing)tvLoad();else clearTimeout(player.timer);tvState(player.state==='ok'?'ok':player.state,tvMsg.textContent);});
  tvRefresh.addEventListener('click',tvLoad);
  tvFull.addEventListener('click',async()=>{if(document.fullscreenElement){document.exitFullscreen().catch(()=>{});return;}if(tv.classList.contains('tv-max')){tv.classList.remove('tv-max');return;}try{await tv.requestFullscreen();}catch{tv.classList.add('tv-max');}});
  tv.addEventListener('keydown',e=>{if(e.key==='Escape'){if(tv.classList.contains('tv-max'))tv.classList.remove('tv-max');else closeCam();e.stopPropagation();}else if(e.key===' '){tvPlay.click();e.preventDefault();}else if(e.key==='ArrowRight')stepCam(1);else if(e.key==='ArrowLeft')stepCam(-1);});
  L.DomEvent.disableClickPropagation(tv);L.DomEvent.disableScrollPropagation(tv);
- function camLayer(){const g=L.layerGroup(),icon=pinIcon('cam','pin-cam pin-watch');for(const cam of cams){const m=L.marker([cam.la,cam.lo],{icon,title:cam.n,keyboard:false});m.on('click',()=>openCam(cam));m.addTo(g);markerFor.set(cam,m);}return g;}
+ function camLayer(){const g=L.layerGroup(),icon=pinIcon('cam','pin-cam pin-watch');for(const cam of listedCams()){const m=L.marker([cam.la,cam.lo],{icon,title:cam.n,keyboard:false});m.on('click',()=>openCam(cam));m.addTo(g);markerFor.set(cam,m);}return g;}
 
  const LAYERS={
   buses:{label:'Buses',group:'move',on:true,show:v=>dash.setBusLayerVisible?.(v)},
@@ -391,7 +401,7 @@
   brt:{label:'Future rapid transit',group:'move',build:brtLayer,count:()=>(D.brt||[]).length},
   closures:{label:'Road closures',group:'move',on:true,layer:closureLayer,count:()=>closureLayer.getLayers().length},
   construction:{label:'Construction',group:'move',on:true,layer:workLayer,count:()=>workLayer.getLayers().length},
-  cams:{label:'Cameras',group:'watch',on:true,build:camLayer,count:()=>cams.length},
+  cams:{label:'Cameras',group:'watch',on:true,build:camLayer,count:()=>listedCams().length},
   power:{label:'Power outages',group:'watch',on:true,layer:powerLayer,count:()=>powerLayer.getLayers().length},
   parks:{label:'Parks',group:'explore',build:parksLayer,count:()=>(D.parks||[]).length},
   facilities:{label:'Leisure & hospitals',group:'explore',layer:facilityLayer,count:()=>facilityLayer.getLayers().length}
@@ -524,23 +534,34 @@
  let wTimer=0;wSearch.addEventListener('input',()=>{clearTimeout(wTimer);wTimer=setTimeout(renderWifi,120);});wOpenBox.addEventListener('change',renderWifi);wKind.addEventListener('change',renderWifi);
  paneOpen.set('wifi',renderWifi);
 
- const camsPane=panes.get('cams'),camList=make('div','cam-list');
- camsPane.append(head('Cameras'),camList,(()=>{return make('p','fine','Still images that refresh on their own. Highway Hotline, a community webcam and PhenoCam.');})());
- let camsBuilt=false;
+ const camsPane=panes.get('cams'),camChips=make('div','chips'),camList=make('div','cam-list');
+ const camGroupButtons=[];
+ for(const [id,label] of [['metro','Metro'],['near','Near me'],['sk','All SK']]){const b=button(label,'chip');b.dataset.camGroup=id;b.setAttribute('aria-pressed',String(id===camGroup));b.addEventListener('click',()=>{camGroup=id;camStamp='';for(const x of camGroupButtons)x.setAttribute('aria-pressed',String(x.dataset.camGroup===id));renderCams();refreshCamLayer();syncCameraWatch();});camGroupButtons.push(b);camChips.append(b);}
+ camsPane.append(head('Cameras'),camChips,camList,make('p','fine','Metro is on by default. All SK stays off until you open it, so the rest of the map keeps moving. Highway Hotline stills refresh about every 15 seconds. PhenoCam Network (fair use).'));
+ function refreshCamLayer(){const spec=LAYERS.cams;if(!spec)return;const on=Boolean(spec.layer&&map.hasLayer(spec.layer));if(spec.layer){map.removeLayer(spec.layer);spec.layer=null;}if(on)setLayer('cams',true);}
+ function watchItems(){if(document.hidden)return [];const extra=!tv.hidden&&player.cam?[player.cam]:[];const pool=camGroup==='sk'&&current==='cams'?listedCams():metroFeeds;const items=[],seen=new Set();for(const cam of [...extra,...pool]){for(const url of cam.urls){if(seen.has(url))continue;seen.add(url);items.push({url,every:Math.max(15,cam.every||60)});if(items.length>=24)return items;}}return items;}
+ function syncCameraWatch(){if(!api.cameraWatch)return;const items=document.hidden||(tv.hidden&&current!=='cams')?[]:watchItems();const key=items.map(item=>item.url+':'+item.every).join('|');if(key===camWatchKey)return;camWatchKey=key;api.cameraWatch(items).catch(()=>{});}
+ async function pullCameraHealth(){if(document.hidden||!api.cameraHealth)return;try{camHealth=await api.cameraHealth()||{};if(current==='cams')renderCams();if(player.cam&&!tv.hidden){tvSrc.textContent=camLabel(player.cam);if(isStale(player.cam))tvState('error','NO SIGNAL');}}catch{}}
  function renderCams(){
-  const o=origin();
-  const list=cams.slice().sort((a,b)=>meters(o.lat,o.lon,a.la,a.lo)-meters(o.lat,o.lon,b.la,b.lo));
-  if(!camsBuilt){camsBuilt=true;}
-  camList.replaceChildren();
-  const bucket=Math.floor(Date.now()/120000)*120000;
+  if(document.hidden)return;
+  const o=origin(),list=listedCams(),bucket=Math.floor(Date.now()/120000);
+  const shownUrl=cam=>{const best=Cam.pickFreshest(cam.urls.map(url=>({url,...(camHealth[url]||{})})));return best?best.url:cam.urls[0];};
+  const stamp=camGroup+'|'+bucket+'|'+list.map(c=>c.id+':'+(isStale(c)?'1':'0')+':'+shownUrl(c)).join(',');
+  const rows=camList.querySelectorAll('.cam-row');
+  if(stamp===camStamp&&rows.length===list.length){rows.forEach(row=>row.setAttribute('aria-current',String(row.dataset.cam===player.cam?.id)));return;}
+  camStamp=stamp;camList.replaceChildren();
   for(const cam of list){
    const b=make('button','cam-row');b.type='button';b.dataset.cam=cam.id;b.setAttribute('aria-current',String(player.cam===cam));
-   const thumb=make('span','cam-thumb'),img=make('img');img.loading='lazy';img.alt='';img.src=camUrl(cam,bucket);img.addEventListener('error',()=>thumb.classList.add('dead'),{once:true});thumb.append(img);
-   const copy=make('span','place-copy');copy.append(make('span','place-name',cam.n),make('span','place-meta',cam.src+' · '+every(cam.every||60)+' · '+dist(meters(o.lat,o.lon,cam.la,cam.lo))));
+   const thumb=make('span','cam-thumb'+(isStale(cam)?' dead':'')),img=make('img');img.loading='lazy';img.alt='';
+   if(!isStale(cam)){img.src=camSrc(shownUrl(cam),bucket*120000);img.addEventListener('error',()=>thumb.classList.add('dead'),{once:true});}
+   thumb.append(img);
+   const copy=make('span','place-copy');copy.append(make('span','place-name',cam.n),make('span','place-meta',camLabel(cam)+' · '+dist(meters(o.lat,o.lon,cam.la,cam.lo))));
    b.append(thumb,copy);b.addEventListener('click',()=>{ensureLayer('cams');openCam(cam);});camList.append(b);
   }
  }
- paneOpen.set('cams',renderCams);
+ paneOpen.set('cams',()=>{renderCams();syncCameraWatch();pullCameraHealth();});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden){clearTimeout(player.timer);api.cameraWatch?.([]).catch(()=>{});return;}syncCameraWatch();if(!tv.hidden&&player.playing&&player.cam)tvLoad();if(current==='cams')renderCams();});
+ setInterval(()=>{if(document.hidden||(tv.hidden&&current!=='cams'))return;syncCameraWatch();pullCameraHealth();},20000);
 
  const tripLayer=L.layerGroup().addTo(map),hereLayer=L.layerGroup().addTo(map);
  let pickTarget=null;
