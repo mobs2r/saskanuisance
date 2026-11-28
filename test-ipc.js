@@ -3,7 +3,7 @@ const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),vm=r
 const out=path.join(os.tmpdir(),'electron-test-v1.6-offline','ipc-profile');fs.mkdirSync(out,{recursive:true});
 const handlers=new Map(),events=new Map();let requestGuard,headersGuard,currentWindow,openedLinks=[],started={transit:0,weather:0};
 const time=Date.parse('2026-11-11T04:30Z');
-class Clock{now(){return time}sync(){return Promise.resolve(this.snapshot())}snapshot(){return {status:'synced',epochMs:time}}invalidate(){}}
+class Clock{retryDelayMs(){return 60000}now(){return time}sync(){return Promise.resolve(this.snapshot())}snapshot(){return {status:'synced',epochMs:time}}invalidate(){}}
 class Provider{constructor(o){this.o=o}start(){started.transit++;return Promise.resolve()}stop(){}serviceHours(){return {allowed:true,status:'scheduled'}}snapshot(){return {clockAvailable:Number.isFinite(this.o.now())}}mapStops(){return []}vehicleDetails(id){return {vehicle:{id}}}routes(){return []}searchStops(q){return [{id:q}]}departures(id){return {stop:{id}}}routeShapes(){return []}}
 class Weather{start(){started.weather++;return Promise.resolve()}stop(){}snapshot(){return {status:'unavailable'}}}
 class Window{constructor(){currentWindow=this;const s={setPermissionRequestHandler(){},setPermissionCheckHandler(){}};this.webContents={mainFrame:{url:pathToFileURL(path.join(__dirname,'index.html')).href},setWindowOpenHandler(fn){this.blockWindow=fn},on(){},session:s};}setMenu(){}async loadFile(){}isMinimized(){return false}show(){}focus(){}}

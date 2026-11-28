@@ -104,6 +104,7 @@
     const serviceNote=document.getElementById('service-countdown');
 
     async function loadTokens() {
+      if (!tokenChoice) return; // ticket picker markup is not in index.html (since e6c47f7); skip instead of aborting the whole UI script
       const data = await window.sampleApp.tokens.get();
       tokenChoice.innerHTML = '<option value="">No ticket (no barcode)</option>';
       for (const token of data.tokens) {
@@ -118,12 +119,12 @@
       paintClock();
     }
 
-    tokenChoice.addEventListener('change', async () => {
+    tokenChoice?.addEventListener('change', async () => {
       await window.sampleApp.tokens.select(tokenChoice.value || null);
       await loadTokens();
     });
 
-    tokenAdd.addEventListener('click', async () => {
+    tokenAdd?.addEventListener('click', async () => {
       const payload = prompt('Barcode digits (8):');
       if (!payload) return;
       const label = prompt('Label:', 'Transfer') || 'Transfer';
@@ -132,7 +133,7 @@
     });
 
     // FIX: stop swallowing the failure silently; leave the reason on the control.
-    loadTokens().catch(error => { tokenChoice.title = 'Tickets unavailable: ' + error.message; });
+    loadTokens().catch(error => { if (tokenChoice) tokenChoice.title = 'Tickets unavailable: ' + error.message; });
 
     async function checkService(){if(servicePending)return;servicePending=true;try{service={...await window.sampleApp.serviceHours(),atMono:performance.now()};}catch{service=null;}finally{servicePending=false;paintClock();}}
     checkService();setInterval(checkService,1000);
@@ -189,7 +190,7 @@
       finally { checkingTime=false; paintClock(); }
     };
     const checkStatus=async()=>{
-      if(checking)return; checking=true;
+      if(checking||printing)return; checking=true;
       try {
         const info=await window.sampleApp.status();
         const connection=['connected','disconnected'].includes(info.connection)?info.connection:'unknown';
@@ -202,7 +203,7 @@
       finally { checking=false; }
     };
     checkStatus(); checkTime(); paintClock();
-    setInterval(checkStatus,5000); setInterval(checkTime,1000); setInterval(paintClock,250);
+    setInterval(checkStatus,15000); setInterval(checkTime,1000); setInterval(paintClock,250);
     printButton.addEventListener('click',async()=>{
       if(printButton.disabled)return;
       const printedAt=printTime.value.trim();
