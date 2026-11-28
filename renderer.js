@@ -131,7 +131,8 @@
       catch (error) { alert(error.message); }
     });
 
-    loadTokens().catch(()=>{});
+    // FIX: stop swallowing the failure silently; leave the reason on the control.
+    loadTokens().catch(error => { tokenChoice.title = 'Tickets unavailable: ' + error.message; });
 
     async function checkService(){if(servicePending)return;servicePending=true;try{service={...await window.sampleApp.serviceHours(),atMono:performance.now()};}catch{service=null;}finally{servicePending=false;paintClock();}}
     checkService();setInterval(checkService,1000);
@@ -151,11 +152,14 @@
       const fresh=clock?.status==='synced' && elapsed>=0 && age!==null && age<=clock.maxAgeMs;
       const state=fresh ? 'synced' : (Number.isFinite(clock?.epochMs) ? 'stale' : 'unavailable');
       setStatus(timeStatus, 'state', state);
-      const description=state==='synced' ? 'Saskatoon time, set from the internet.' : state==='stale' ? 'Clock lost its internet connection. Printing is paused.' : 'Connect to the internet to set the clock. Printing is paused.';
+      // FIX: surface the real clock error instead of a generic string.
+      const detail=clock?.error && state!=='synced' ? ' ' + clock.error : '';
+      const description=(state==='synced' ? 'Saskatoon time, set from the internet.' : state==='stale' ? 'Clock lost its internet connection. Printing is paused.' : 'Connect to the internet to set the clock. Printing is paused.') + detail;
       timeStatus.title=description; timeStatus.setAttribute('aria-label',description);
       const instant=Number.isFinite(clock?.epochMs) && elapsed>=0 ? clock.epochMs+elapsed : null;
       currentTime.textContent=instant===null ? 'Time unavailable' : (state==='stale' ? '~ ' : '')+liveTime.format(instant);
-      currentDate.textContent=instant===null ? '' : liveDate.format(instant);
+      // FIX: put the reason on screen, not just in a tooltip.
+      currentDate.textContent=instant===null ? (clock?.error || '') : liveDate.format(instant);
       currentTime.title=description; currentDate.title='Saskatoon';
       if(instant===null) clearExpiry();
       else if (activeToken) refreshFromToken();
