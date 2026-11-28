@@ -148,7 +148,7 @@
  const away=p=>{const o=origin();return meters(o.lat,o.lon,p.la??p.lat,p.lo??p.lon);};
 
  const topbar=make('header','topbar'),brand=make('div','brand'),tabs=make('nav','tabs'),topRight=make('div','top-right');
- brand.append(make('b','','YXE'),make('span','',' field guide'));
+ brand.append(make('span','','field guide'));
  tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Sections');
  topRight.append(weather);
  topbar.append(brand,tabs,topRight);

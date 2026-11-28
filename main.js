@@ -10,7 +10,6 @@ const {WindowsAnnouncements}=require('./stop-announcements');
 const announcements=new WindowsAnnouncements();
 const {PROFILE,profileFor,savedProfile} = require('./paper-profiles');
 const {parsePrintedAt} = require('./print-time');
-const {compose} = require('./text-print');
 const {validateChunks} = require('./receipt-chunks');
 const {HOTLINE_IMAGE} = require('./camera-feeds');
 const {createCameraProbe} = require('./camera-probe');
@@ -35,7 +34,6 @@ function scheduleSync() {
   syncTimer = setTimeout(async () => { await internetClock.sync(); scheduleSync(); }, internetClock.retryDelayMs());
   if (syncTimer.unref) syncTimer.unref();
 }
-const receiptFormat = new Intl.DateTimeFormat('en-US', {timeZone:'America/Regina',year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
 let transitProvider=null, weatherProvider=null, cityInfoProvider=null, cityMapProvider=null, saskPowerProvider=null, cityPowerProvider=null;
 const trustedNow=()=>{try{return internetClock.now();}catch{return null;}};
 const bus = new SignalBus();
@@ -225,17 +223,7 @@ async function handlePrint(event, ask = () => dialog.showMessageBox(window, PRIN
     const preview = await renderReceipt(issuedAt);
     internetClock.now();
     if(!transitData().serviceHours().allowed)return {ok:false,message:'Scheduled service availability changed. Nothing was printed.'};
-    const expiry = new Date(issuedAt + 90 * 60 * 1000);
-    const parts = Object.fromEntries(receiptFormat.formatToParts(expiry).map(part => [part.type, part.value]));
-    const raster = compose({
-      time: parts.hour + ':' + parts.minute + ' ' + parts.dayPeriod,
-      date: (parts.month + ' ' + parts.day + ',' + parts.year).toUpperCase(),
-      terms: preview.details.footerLines.map(line => line.text),
-      barcode: null,
-      logo: preview.logoRaster,
-      profile: profileFor(selectedPaper)
-    });
-    const result = await sendRaster(raster);
+    const result = await sendRaster(preview.raster);
     return {ok: true, message: 'Sample sent to M860 (job ' + result.jobId + '). Check the paper before printing again.'};
   } catch (error) { return {ok: false, message: error.message}; }
   finally { busy = false; }

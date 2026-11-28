@@ -9,9 +9,43 @@
   let paperWidth = 56;
   let activeToken = null;
 
-  function showReceiptText(node, value) {
-    if (node.textContent !== value) node.textContent = value;
+  const bitmap = window.YXE_BITMAP;
+  function paintBitmap(node, value, scale, gap, cssScale) {
+    const drawn = bitmap.rasterText(value, scale, gap);
+    const canvas = document.createElement('canvas');
+    canvas.className = 'receipt-bitmap';
+    canvas.width = drawn.width;
+    canvas.height = drawn.height;
+    const ctx = canvas.getContext('2d', {alpha: false});
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, drawn.width, drawn.height);
+    ctx.fillStyle = '#000000';
+    for (let i = 0; i < drawn.pixels.length; i++) {
+      if (!drawn.pixels[i]) continue;
+      ctx.fillRect(i % drawn.width, (i / drawn.width) | 0, 1, 1);
+    }
+    const raw = ctx.getImageData(0, 0, drawn.width, drawn.height);
+    for (let i = 0; i < raw.data.length; i += 4) {
+      const ink = raw.data[i] < 128 ? 0 : 255;
+      raw.data[i] = raw.data[i + 1] = raw.data[i + 2] = ink;
+      raw.data[i + 3] = 255;
+    }
+    ctx.putImageData(raw, 0, 0);
+    if (cssScale && cssScale !== 1) {
+      canvas.style.width = Math.max(1, Math.round(drawn.width * cssScale)) + 'px';
+      canvas.style.height = drawn.height + 'px';
+    }
+    const source = document.createElement('span');
+    source.className = 'receipt-source';
+    source.textContent = value;
+    node.replaceChildren(canvas, source);
     if (node.getAttribute('aria-label') !== value) node.setAttribute('aria-label', value);
+  }
+  function paintStaticReceipt() {
+    paintBitmap(document.querySelector('.heading'), 'Proof of Payment', 2, 1);
+    paintBitmap(document.querySelector('.valid-label'), 'Valid Until:', 2, 1);
+    for (const line of document.querySelectorAll('.terms-line')) paintBitmap(line, line.querySelector('.receipt-source')?.textContent || line.textContent, 1, 0, 0.75);
   }
 
   const zone = 'America/Regina';
@@ -22,8 +56,8 @@
 
   function clearExpiry() {
     if(lastReceiptText === "pending") return; lastReceiptText = "pending";
-    timeNode.innerHTML='<span class="pending-time">--:-- --</span>';
-    dateNode.innerHTML='<span class="pending-date">Waiting for internet time</span>';
+    paintBitmap(timeNode, '--:-- --', 2, 1);
+    paintBitmap(dateNode, 'Waiting for internet time', 1, 0);
     timeNode.removeAttribute('datetime'); dateNode.removeAttribute('datetime');
   }
   function refreshExpiry(now) {
@@ -32,8 +66,8 @@
     const parts = Object.fromEntries(dateParts.formatToParts(expiry).map(part=>[part.type,part.value]));
     const nextReceiptText = parts.hour + ':' + parts.minute + ' ' + parts.dayPeriod + '|' + parts.month + ' ' + parts.day + ',' + parts.year;
     if(nextReceiptText !== lastReceiptText) {
-      showReceiptText(timeNode, parts.hour + ':' + parts.minute + ' ' + parts.dayPeriod);
-      showReceiptText(dateNode, (parts.month + ' ' + parts.day + ',' + parts.year).toUpperCase());
+      paintBitmap(timeNode, parts.hour + ':' + parts.minute + ' ' + parts.dayPeriod, 2, 1);
+      paintBitmap(dateNode, parts.month + ' ' + parts.day + ',' + parts.year, 2, 1);
       lastReceiptText = nextReceiptText;
     }
     const iso = expiry.toISOString(); if (timeNode.dateTime !== iso) { timeNode.dateTime = iso; dateNode.dateTime = iso; }
@@ -57,6 +91,7 @@
   function preparePrint(now) { refreshExpiry(now); updatePageSize(); }
   window.addEventListener('load', updatePageSize);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(updatePageSize);
+  paintStaticReceipt();
   clearExpiry(); updatePageSize();
   const isRender = new URLSearchParams(location.search).has('render');
   document.documentElement.classList.toggle('render', isRender);
