@@ -39,21 +39,22 @@ function fetchSource(provider, monotonic = mono) {
 class InternetClock {
   constructor({monotonic=mono,fetcher=fetchSource,maxAge=MAX_AGE_MS}={}) {
     this.monotonic=monotonic; this.fetcher=fetcher; this.maxAge=maxAge;
-    this.anchor=null; this.lastError='Waiting for internet time.'; this.pending=null; this.generation=0;
+    this.anchor=null; this.lastError='Waiting for internet time.'; this.pending=null; this.generation=0; this.invalidated=false;
   }
   snapshot() {
     const current=this.monotonic();
     const age=this.anchor ? current-this.anchor.atMono : null;
     const sane=age!==null && age>=0;
     // FIX: a recorded error no longer downgrades a fresh anchor. Only real staleness does.
-    const expired=!sane || age>this.maxAge;
+    const expired=!sane || age>this.maxAge || this.invalidated;
     const status=!this.anchor ? 'unavailable' : (expired ? 'stale' : 'synced');
     return {status,epochMs:sane ? this.anchor.epochMs+age : null,ageMs:sane?age:null,maxAgeMs:this.maxAge,timeZone:ZONE,error:this.lastError,sources:this.anchor?.sources || []};
   }
   now() { const state=this.snapshot(); if(state.status!=='synced') throw new Error('Internet time is unavailable or stale. Reconnect and wait for the time indicator to turn green.'); return state.epochMs; }
-  invalidate(reason='Internet time needs a new sync.') { this.lastError=reason; this.generation++; }
+  // Suspend/resume: the monotonic clock may not have counted sleep, so the anchor cannot be trusted until a new sync lands.
+  invalidate(reason='Internet time needs a new sync.') { this.lastError=reason; this.generation++; this.invalidated=true; }
   // FIX: back off quickly while there is no anchor, then settle onto the minute.
-  retryDelayMs() { return this.anchor ? 60000 : 5000; }
+  retryDelayMs() { return this.anchor && !this.invalidated ? 30000 : 5000; }
   sync() {
     if(this.pending) return this.pending;
     const generation=this.generation;
@@ -76,6 +77,7 @@ class InternetClock {
         if(estimates.length===2 && Math.abs(estimates[0]-estimates[1])>3000) throw new Error('Internet time sources disagree.');
         if(generation!==this.generation) throw new Error('Time sync interrupted.');
         this.anchor={epochMs:estimates.reduce((total,value)=>total+value,0)/estimates.length,atMono:at,sources:good.map(sample=>sample.provider)};
+        this.invalidated=false;
         this.lastError=failures.length ? 'Degraded: ' + failures.join(' ') : null;
       } catch(error) { this.lastError=error.message || 'Internet time unavailable.'; }
       finally { this.pending=null; }
