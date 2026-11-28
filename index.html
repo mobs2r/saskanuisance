@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en" data-paper="roll57">
 <head>
-<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://tile.openstreetmap.org https://a.tile.opentopomap.org https://b.tile.opentopomap.org https://c.tile.opentopomap.org https://a.tile.openstreetmap.fr https://b.tile.openstreetmap.fr https://c.tile.openstreetmap.fr https://a.tile-cyclosm.openstreetmap.fr https://b.tile-cyclosm.openstreetmap.fr https://c.tile-cyclosm.openstreetmap.fr https://tile.memomaps.de https://basemaps.cartocdn.com https://tiles.maps.eox.at https://hotline.gov.sk.ca https://www.wagondriver.com https://phenocam.nau.edu; font-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'">
+<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://tile.openstreetmap.org https://a.tile.opentopomap.org https://b.tile.opentopomap.org https://c.tile.opentopomap.org https://a.tile.openstreetmap.fr https://b.tile.openstreetmap.fr https://c.tile.openstreetmap.fr https://a.tile-cyclosm.openstreetmap.fr https://b.tile-cyclosm.openstreetmap.fr https://c.tile-cyclosm.openstreetmap.fr https://tile.memomaps.de https://basemaps.cartocdn.com https://tiles.maps.eox.at https://hotline.gov.sk.ca https://phenocam.nau.edu; font-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="description" content="Saskatoon field guide: buses, routes, free Wi-Fi, cameras and places.">
@@ -143,7 +143,7 @@ body { padding: 24px; }
 <p>VIA Rail schedule from VIA Rail open data, <a href="https://open.canada.ca/en/open-government-licence-canada" data-link="ogl">Open Government Licence &ndash; Canada</a>.</p>
 <p>Landmarks from Wikidata (CC0). Library Wi-Fi from Saskatoon Public Library.</p>
 <p>Mailboxes and counters: Canada Post public location data. Extra shop locations and hours: All the Places (CC0), 31 Oct 2026.</p>
-<p>Cameras: Government of Saskatchewan Highway Hotline; East Saskatoon community webcam; PhenoCam Network (fair use).</p>
+<p>Cameras: Government of Saskatchewan Highway Hotline (public highway stills). PhenoCam Network, University of Saskatchewan research plots (fair use).</p>
 <p>Outages from SaskPower and Saskatoon Light &amp; Power.</p>
 <p>Data Source: Environment and Climate Change Canada, <a href="https://eccc-msc.github.io/open-data/licence/readme_en/" data-link="weatherLicense">Data Services End-use Licence</a>.</p>
 <p>Questrial by The Questrial Project Authors via Google Fonts, <a href="https://openfontlicense.org/open-font-license-official-text/" data-link="ofl">SIL OFL 1.1</a>. Receipt font adapted from DejaVu (Bitstream Vera licence; DejaVu changes public domain). Full notices ship with the app.</p>
@@ -154,7 +154,7 @@ body { padding: 24px; }
  <header class="data-heading"><div><p class="eyebrow">SASKATOON</p><h1 id="weather-heading">Weather</h1></div><span id="weather-health" class="data-badge">…</span></header>
  <p id="weather-note" class="data-note" role="status">Loading</p><div id="weather-current" class="weather-current"></div><div id="weather-metrics" class="weather-metrics"></div><h2>Forecast</h2><p id="forecast-issued" class="data-note"></p><div id="weather-forecast" class="weather-forecast"></div>
  <p class="source-note"><a href="https://eccc-msc.github.io/open-data/licence/readme_en/" data-link="weatherLicense">Data Source: Environment and Climate Change Canada</a>. For weather warnings, check Environment Canada.</p>
-</dialog><script src="renderer.js" defer></script><script src="vendor/leaflet/leaflet.js" defer></script><script src="bus-motion.js" defer></script><script src="observed-positions.js" defer></script><script src="route-motion.js" defer></script><script src="data/places-data.js" defer></script><script src="city-panels.js" defer></script><script src="terminal.js" defer></script><script src="city-guide.js" defer></script><script src="theme.js" defer></script></body>
+</dialog><script src="renderer.js" defer></script><script src="vendor/leaflet/leaflet.js" defer></script><script src="bus-motion.js" defer></script><script src="observed-positions.js" defer></script><script src="route-motion.js" defer></script><script src="data/places-data.js" defer></script><script src="data/hotline-sk.js" defer></script><script src="camera-feeds.js" defer></script><script src="city-panels.js" defer></script><script src="terminal.js" defer></script><script src="city-guide.js" defer></script><script src="theme.js" defer></script></body>
 
 </html>
 

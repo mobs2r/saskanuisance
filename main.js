@@ -12,6 +12,8 @@ const {PROFILE,profileFor,savedProfile} = require('./paper-profiles');
 const {parsePrintedAt} = require('./print-time');
 const {compose} = require('./text-print');
 const {validateChunks} = require('./receipt-chunks');
+const {HOTLINE_IMAGE} = require('./camera-feeds');
+const {createCameraProbe} = require('./camera-probe');
 const tokens = require('./tokens');
 const {SignalBus} = require('./signal-bus');
 const {createAdapters} = require('./adapters');
@@ -50,7 +52,7 @@ function cityMapData(){if(!cityMapProvider){const {CityMapProvider}=require('./c
 function powerOutageData(){if(!saskPowerProvider){const {SaskPowerProvider}=require('./saskpower-provider');saskPowerProvider=new SaskPowerProvider();saskPowerProvider.start();}return saskPowerProvider;}
 function cityPowerData(){if(!cityPowerProvider){const {CityPowerProvider}=require('./city-power-provider');cityPowerProvider=new CityPowerProvider();}return cityPowerProvider;}
 // FIX: clear the sync timer on quit.
-app.on('before-quit',()=>{if(syncTimer)clearTimeout(syncTimer);bus.stopAll();transitProvider?.stop();weatherProvider?.stop();cityInfoProvider?.stop();cityMapProvider?.stop();saskPowerProvider?.stop();cityPowerProvider?.stop();announcements.stop();});
+app.on('before-quit',()=>{if(syncTimer)clearTimeout(syncTimer);cameraProbe.stop();bus.stopAll();transitProvider?.stop();weatherProvider?.stop();cityInfoProvider?.stop();cityMapProvider?.stop();saskPowerProvider?.stop();cityPowerProvider?.stop();announcements.stop();});
 const REMOTE_IMAGES=Object.freeze([
   /^https:\/\/tile\.openstreetmap\.org\/\d{1,2}\/\d+\/\d+\.png$/,
   /^https:\/\/[abc]\.tile\.opentopomap\.org\/\d{1,2}\/\d+\/\d+\.png$/,
@@ -59,10 +61,10 @@ const REMOTE_IMAGES=Object.freeze([
   /^https:\/\/tile\.memomaps\.de\/tilegen\/\d{1,2}\/\d+\/\d+\.png$/,
   /^https:\/\/basemaps\.cartocdn\.com\/(?:dark_all|light_all)\/\d{1,2}\/\d+\/\d+\.png$/,
   /^https:\/\/tiles\.maps\.eox\.at\/wmts\/1\.0\.0\/s2cloudless_3857\/default\/g\/\d{1,2}\/\d+\/\d+\.jpg$/,
-  /^https:\/\/hotline\.gov\.sk\.ca\/map\/Cctv\/(?:10|13|14|16|17|30|36|49|50|53|56|57)(?:\?v=\d{10,13})?$/,
-  /^https:\/\/www\.wagondriver\.com\/USBCamera\.jpg(?:\?v=\d{10,13})?$/,
+  HOTLINE_IMAGE,
   /^https:\/\/phenocam\.nau\.edu\/data\/latest\/saskatoon1\.jpg(?:\?v=\d{10,13})?$/
 ]);
+const cameraProbe = createCameraProbe({allowed: url => REMOTE_IMAGES.some(pattern => pattern.test(url))});
 let routePlanner=null;
 function planner(){if(!routePlanner){const {RoutePlanner}=require('./route-planner');routePlanner=new RoutePlanner({transit:()=>transitData(),weather:()=>weatherData().snapshot(),now:()=>trustedNow()??Date.now()});}return routePlanner;}
 const PRINTER = 'M860 USB Text Test';
@@ -258,6 +260,15 @@ async function start() {
     if(!Object.hasOwn(links,key)) throw new Error('Unsupported link.');
     if(selfTestDir) return {ok:true,url:links[key],opened:false};
     await shell.openExternal(links[key]); return {ok:true};
+  });
+  ipcMain.handle('sample:cameras:watch', (event, items) => {
+    if(!isTrusted(event) || !Array.isArray(items) || items.length > 24) throw new Error('Untrusted request.');
+    cameraProbe.watch(items);
+    return {watching: items.length};
+  });
+  ipcMain.handle('sample:cameras:health', event => {
+    if(!isTrusted(event)) throw new Error('Untrusted request.');
+    return cameraProbe.snapshot();
   });
   ipcMain.handle('sample:plan', async (event,request) => {
     if(!isTrusted(event)) throw new Error('Untrusted request.');
